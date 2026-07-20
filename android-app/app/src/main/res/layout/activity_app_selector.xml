@@ -8,18 +8,18 @@
 
     <!-- Search Bar -->
     <com.google.android.material.textfield.TextInputLayout
+        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="@string/search_hint"
-        android:padding="12dp"
-        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        android:padding="12dp">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etSearch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
-            android:imeOptions="actionSearch" />
+            android:imeOptions="actionSearch"
+            android:inputType="text" />
     </com.google.android.material.textfield.TextInputLayout>
 
     <!-- App List -->
@@ -32,11 +32,12 @@
 
     <!-- Save Button -->
     <com.google.android.material.button.MaterialButton
+        style="@style/Widget.MaterialComponents.Button"
         android:id="@+id/btnSave"
         android:layout_width="match_parent"
         android:layout_height="52dp"
+        android:layout_margin="16dp"
         android:text="@string/btn_save"
-        android:margin="16dp"
-        android:textSize="16sp"
-        style="@style/Widget.MaterialComponents.Button" />
+        android:textSize="16sp" />
+
 </LinearLayout>

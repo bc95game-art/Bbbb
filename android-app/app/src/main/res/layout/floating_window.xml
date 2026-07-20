@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -8,13 +9,13 @@
     <!-- Extract Button -->
     <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
         android:id="@+id/btnExtract"
+        style="@style/Widget.MaterialComponents.ExtendedFloatingActionButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="🔗 استخراج"
-        android:textSize="13sp"
-        android:backgroundTint="@color/accent"
         android:textColor="#FFFFFF"
-        style="@style/Widget.MaterialComponents.ExtendedFloatingActionButton" />
+        android:textSize="13sp"
+        app:backgroundTint="@color/accent" />
 
     <!-- Close Button -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
@@ -22,9 +23,9 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:src="@android:drawable/ic_menu_close_clear_cancel"
         android:contentDescription="@string/close"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
         app:backgroundTint="#99000000"
-        app:fabSize="mini"
-        xmlns:app="http://schemas.android.com/apk/res-auto" />
+        app:fabSize="mini" />
+
 </LinearLayout>

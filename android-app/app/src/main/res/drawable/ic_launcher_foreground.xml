@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Link chain icon centered in the adaptive icon safe zone (72x72 centered in 108x108) -->
+    <!-- Left ring -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,46 C36,39.4 41.4,34 48,34 L54,34 C57.3,34 60,36.7 60,40 C60,43.3 57.3,46 54,46 L48,46 C44.7,46 42,48.7 42,52 C42,55.3 44.7,58 48,58 L54,58 C57.3,58 60,60.7 60,64 C60,67.3 57.3,70 54,70 L48,70 C41.4,70 36,64.6 36,58 Z" />
+    <!-- Right ring -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,46 C72,39.4 66.6,34 60,34 L54,34 C50.7,34 48,36.7 48,40 C48,43.3 50.7,46 54,46 L60,46 C63.3,46 66,48.7 66,52 C66,55.3 63.3,58 60,58 L54,58 C50.7,58 48,60.7 48,64 C48,67.3 50.7,70 54,70 L60,70 C66.6,70 72,64.6 72,58 Z" />
+</vector>

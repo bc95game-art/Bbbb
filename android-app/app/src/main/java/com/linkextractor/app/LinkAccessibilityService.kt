@@ -13,11 +13,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 class LinkAccessibilityService : AccessibilityService() {
 
     companion object {
-        /** Broadcast action sent when a link is detected */
         const val ACTION_LINK_DETECTED = "com.linkextractor.app.LINK_DETECTED"
         const val EXTRA_LINKS = "links"
 
-        /** Shared instance reference (set in onServiceConnected) */
         var instance: LinkAccessibilityService? = null
 
         private val URL_REGEX = Regex(
@@ -63,27 +61,27 @@ class LinkAccessibilityService : AccessibilityService() {
         val selectedApps = PrefsManager.getSelectedApps(this)
         if (selectedApps.isNotEmpty() && pkg !in selectedApps) return
 
-        // Track package change → clear old links
         if (pkg != currentPackage) {
             currentPackage = pkg
             detectedLinks.clear()
         }
 
-        // Collect text from all nodes in the window
+        @Suppress("DEPRECATION")
         val root = rootInActiveWindow ?: return
         try {
             collectLinksFromNode(root)
         } finally {
+            @Suppress("DEPRECATION")
             root.recycle()
         }
     }
 
-    override fun onInterrupt() { /* required override */ }
+    override fun onInterrupt() { /* required */ }
 
     // ── Link Collection ────────────────────────────────────────────────────────
 
+    @Suppress("DEPRECATION")
     private fun collectLinksFromNode(node: AccessibilityNodeInfo) {
-        // Check this node's text
         val text = node.text?.toString() ?: ""
         val contentDesc = node.contentDescription?.toString() ?: ""
         val viewId = node.viewIdResourceName ?: ""
@@ -95,7 +93,6 @@ class LinkAccessibilityService : AccessibilityService() {
             }
         }
 
-        // Recurse into children
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             collectLinksFromNode(child)
@@ -103,21 +100,23 @@ class LinkAccessibilityService : AccessibilityService() {
         }
     }
 
-    // ── Public API (called by FloatingWindowService) ───────────────────────────
+    // ── Public API ─────────────────────────────────────────────────────────────
 
-    /**
-     * Returns all currently detected links and broadcasts them.
-     */
     fun extractCurrentLinks(): List<String> {
+        @Suppress("DEPRECATION")
         val root = rootInActiveWindow
         if (root != null) {
             detectedLinks.clear()
-            try { collectLinksFromNode(root) } finally { root.recycle() }
+            try {
+                collectLinksFromNode(root)
+            } finally {
+                @Suppress("DEPRECATION")
+                root.recycle()
+            }
         }
 
         val links = detectedLinks.toList()
 
-        // Broadcast so FloatingWindowService / MainActivity can receive them
         val intent = Intent(ACTION_LINK_DETECTED).apply {
             setPackage(packageName)
             putStringArrayListExtra(EXTRA_LINKS, ArrayList(links))
