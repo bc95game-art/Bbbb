@@ -13,6 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.linkextractor.app.databinding.ActivityAppSelectorBinding
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -20,6 +21,7 @@ class AppSelectorActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityAppSelectorBinding
     private lateinit var adapter: AppAdapter
+    private var loadJob: Job? = null   // cancelled in onDestroy to prevent leaks
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,7 +36,12 @@ class AppSelectorActivity : AppCompatActivity() {
         setupRecyclerView()
         setupSearch()
         setupSaveButton()
-        loadApps()   // async
+        loadApps()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        loadJob?.cancel()
     }
 
     override fun onSupportNavigateUp(): Boolean { finish(); return true }
@@ -59,7 +66,7 @@ class AppSelectorActivity : AppCompatActivity() {
                 adapter.filter(s?.toString() ?: "")
                 val count = adapter.itemCount
                 binding.tvResultCount.text = if (count > 0) "$count برنامه" else ""
-                binding.tvEmptyApps.isVisible = count == 0
+                binding.tvEmptyApps.isVisible = count == 0 && binding.progressBar.isVisible.not()
             }
         })
     }
@@ -78,16 +85,17 @@ class AppSelectorActivity : AppCompatActivity() {
         }
     }
 
-    // ── Load Apps (async) ──────────────────────────────────────────────────────
+    // ── Load Apps (async with coroutines) ──────────────────────────────────────
 
     private fun loadApps() {
         binding.progressBar.isVisible = true
         binding.rvApps.isVisible      = false
         binding.tvEmptyApps.isVisible = false
 
-        CoroutineScope(Dispatchers.IO).launch {
+        loadJob = CoroutineScope(Dispatchers.IO).launch {
             val selectedApps = PrefsManager.getSelectedApps(this@AppSelectorActivity)
             val pm = packageManager
+
             val apps = try {
                 getInstalledUserApps(pm)
                     .mapNotNull { appInfo ->
@@ -108,6 +116,8 @@ class AppSelectorActivity : AppCompatActivity() {
             }
 
             withContext(Dispatchers.Main) {
+                if (isDestroyed) return@withContext
+
                 binding.progressBar.isVisible = false
 
                 if (apps.isEmpty()) {
@@ -123,24 +133,24 @@ class AppSelectorActivity : AppCompatActivity() {
         }
     }
 
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
     @Suppress("DEPRECATION")
     private fun getInstalledUserApps(pm: PackageManager): List<ApplicationInfo> {
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
-            PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
-        else
-            PackageManager.GET_META_DATA
+        val all: List<ApplicationInfo> =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getInstalledApplications(
+                    PackageManager.ApplicationInfoFlags.of(
+                        PackageManager.GET_META_DATA.toLong()
+                    )
+                )
+            } else {
+                pm.getInstalledApplications(PackageManager.GET_META_DATA)
+            }
 
-        val all: List<ApplicationInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pm.getInstalledApplications(
-                PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
-            )
-        } else {
-            pm.getInstalledApplications(PackageManager.GET_META_DATA)
-        }
-
-        // Exclude pure system apps, but keep system apps that have a user activity
+        // Keep user-installed apps and updated system apps; skip pure system apps
         return all.filter { info ->
-            val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            val isSystem  = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
             val isUpdated = (info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
             !isSystem || isUpdated
         }

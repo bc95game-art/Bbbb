@@ -64,44 +64,22 @@
         </service>
 
         <!--
-            Intent Monitor Receiver
-            ─────────────────────────────────────────────────────────────────────
-            Listens for:
-              • ACTION_VIEW  → captures http/https/deep-link URLs
-              • ACTION_SEND  → captures shared URLs
-              • ACTION_SENDTO → captures mailto / sip-style links
-              • Internal broadcast from our own AccessibilityService
+            Intent Monitor Receiver — دریافت لینک‌های اشتراک‌گذاری
+            فقط ACTION_SEND نگه داشتیم تا برنامه به عنوان مرورگر نمایش داده نشود.
+            لینک‌های http/https از طریق AccessibilityService شناسایی می‌شوند.
         -->
         <receiver
             android:name=".IntentMonitorReceiver"
-            android:exported="true"
-            tools:ignore="ExportedReceiver">
+            android:exported="false">
 
-            <!-- Public http/https VIEW intents (other apps opening links) -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="http" />
-                <data android:scheme="https" />
-            </intent-filter>
-
-            <!-- Shared content that may contain a URL -->
+            <!-- لینک‌های به اشتراک گذاشته شده (مثلاً Share از تلگرام) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
 
-            <!-- Deep-links (custom schemes like shad://, zarrin://, etc.) -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="*" />
-            </intent-filter>
-
-            <!-- Internal broadcast from AccessibilityService -->
+            <!-- برادکست داخلی از AccessibilityService -->
             <intent-filter>
                 <action android:name="com.linkextractor.app.LINK_DETECTED" />
             </intent-filter>
