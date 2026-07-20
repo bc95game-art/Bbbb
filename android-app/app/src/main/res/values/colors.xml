@@ -11,5 +11,6 @@
     <color name="green">#2E7D32</color>
     <color name="red">#C62828</color>
     <color name="status_idle">#90CAF9</color>
+    <!-- ic_launcher_background lives only here — NOT in ic_launcher_background.xml -->
     <color name="ic_launcher_background">#1565C0</color>
 </resources>

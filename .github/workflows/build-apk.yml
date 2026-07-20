@@ -5,7 +5,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:  # اجازه اجرای دستی از GitHub
+  workflow_dispatch:
 
 jobs:
   build:
@@ -13,54 +13,48 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # ── ۱. دریافت کد ─────────────────────────────────────────────────────────
-      - name: Checkout repository
+      # ── 1. دریافت کد ──────────────────────────────────────────────────────
+      - name: Checkout
         uses: actions/checkout@v4
 
-      # ── ۲. راه‌اندازی Java 17 ────────────────────────────────────────────────
+      # ── 2. Java 17 ────────────────────────────────────────────────────────
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      # ── ۳. راه‌اندازی Android SDK ────────────────────────────────────────────
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # ── 3. تایید لایسنس Android SDK (pre-installed on ubuntu-latest) ─────
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses || true
 
-      # ── ۴. ساخت gradlew و کش ────────────────────────────────────────────────
-      - name: Setup Gradle
+      # ── 4. نصب Gradle و ساخت wrapper ────────────────────────────────────
+      - name: Setup Gradle 8.4
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.4'
 
-      # ── ۵. دادن اجازه اجرا به gradlew ───────────────────────────────────────
       - name: Generate Gradle Wrapper
         working-directory: android-app
-        run: gradle wrapper --gradle-version=8.4 --distribution-type=bin
+        run: |
+          gradle wrapper --gradle-version=8.4 --distribution-type=bin
+          chmod +x gradlew
 
-      - name: Make gradlew executable
-        working-directory: android-app
-        run: chmod +x gradlew
-
-      # ── ۶. ساخت APK ──────────────────────────────────────────────────────────
+      # ── 5. Build APK ──────────────────────────────────────────────────────
       - name: Build Debug APK
         working-directory: android-app
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # ── ۷. آپلود APK به عنوان Artifact ──────────────────────────────────────
-      - name: Upload APK
+      # ── 6. آپلود APK ──────────────────────────────────────────────────────
+      - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
           name: LinkExtractor-debug-apk
           path: android-app/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      # ── ۸. نمایش مسیر APK ───────────────────────────────────────────────────
-      - name: Show APK info
-        working-directory: android-app
+      - name: Build summary
         run: |
-          echo "✅ ساخت موفق!"
-          ls -lh app/build/outputs/apk/debug/app-debug.apk
-          echo "APK در تب Actions > این workflow > Artifacts قابل دانلود است"
+          echo "## ✅ Build موفق!" >> $GITHUB_STEP_SUMMARY
+          ls -lh android-app/app/build/outputs/apk/debug/app-debug.apk >> $GITHUB_STEP_SUMMARY
+          echo "APK را از بخش Artifacts دانلود کنید" >> $GITHUB_STEP_SUMMARY
