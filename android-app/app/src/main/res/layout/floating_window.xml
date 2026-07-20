@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center_horizontal">
+
+    <!-- Extract Button -->
+    <com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
+        android:id="@+id/btnExtract"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🔗 استخراج"
+        android:textSize="13sp"
+        android:backgroundTint="@color/accent"
+        android:textColor="#FFFFFF"
+        style="@style/Widget.MaterialComponents.ExtendedFloatingActionButton" />
+
+    <!-- Close Button -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/btnClose"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:src="@android:drawable/ic_menu_close_clear_cancel"
+        android:contentDescription="@string/close"
+        app:backgroundTint="#99000000"
+        app:fabSize="mini"
+        xmlns:app="http://schemas.android.com/apk/res-auto" />
+</LinearLayout>

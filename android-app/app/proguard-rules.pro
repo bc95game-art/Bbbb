@@ -1,0 +1,2 @@
+-keep class com.linkextractor.app.** { *; }
+-keepattributes *Annotation*
