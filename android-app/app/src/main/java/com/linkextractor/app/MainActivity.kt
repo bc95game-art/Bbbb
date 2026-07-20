@@ -5,15 +5,20 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.PixelFormat
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.linkextractor.app.databinding.ActivityMainBinding
 
@@ -87,11 +92,10 @@ class MainActivity : AppCompatActivity() {
             onLinkCopied = { link ->
                 Snackbar.make(binding.root, "✓ لینک کپی شد", Snackbar.LENGTH_SHORT)
                     .setAction("اشتراک") {
-                        val share = Intent(Intent.ACTION_SEND).apply {
+                        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
                             putExtra(Intent.EXTRA_TEXT, link)
-                        }
-                        startActivity(Intent.createChooser(share, "اشتراک‌گذاری"))
+                        }, "اشتراک‌گذاری"))
                     }.show()
             }
         }
@@ -121,9 +125,34 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ── Permission Helpers ─────────────────────────────────────────────────────
+    // ── Permission Checks ──────────────────────────────────────────────────────
 
-    private fun hasOverlayPermission() = Settings.canDrawOverlays(this)
+    /**
+     * Xiaomi/MIUI bug: Settings.canDrawOverlays() returns false even after
+     * the user grants the permission. Workaround: attempt to actually add a
+     * 0-sized overlay window — if it succeeds the permission is truly granted.
+     */
+    private fun hasOverlayPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        if (Settings.canDrawOverlays(this)) return true
+
+        // MIUI workaround — try creating a real overlay
+        return try {
+            val wm = getSystemService(WINDOW_SERVICE) as WindowManager
+            val v  = View(this)
+            val lp = WindowManager.LayoutParams(
+                0, 0,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            )
+            wm.addView(v, lp)
+            wm.removeView(v)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     private fun hasAccessibilityPermission(): Boolean {
         return try {
@@ -131,20 +160,41 @@ class MainActivity : AppCompatActivity() {
                 ?: return false
             am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
                 .any { it.resolveInfo.serviceInfo.packageName == packageName }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
+
+    // ── Permission Request Helpers ─────────────────────────────────────────────
 
     private fun requestOverlayPermission() {
         if (hasOverlayPermission()) {
             Snackbar.make(binding.root, "مجوز از قبل فعال است ✓", Snackbar.LENGTH_SHORT).show()
             return
         }
+        // On MIUI, show extra guidance before opening settings
+        if (isMiui()) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("راهنمای Xiaomi")
+                .setMessage(
+                    "۱. در صفحه بعد «مجاز کردن نمایش روی سایر برنامه‌ها» را روشن کنید\n\n" +
+                    "۲. سپس دکمه بازگشت را بزنید تا به برنامه برگردید"
+                )
+                .setPositiveButton("ادامه") { _, _ -> launchOverlaySettings() }
+                .setNegativeButton("لغو", null)
+                .show()
+        } else {
+            launchOverlaySettings()
+        }
+    }
+
+    private fun launchOverlaySettings() {
         runCatching {
             overlayLauncher.launch(
-                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName"))
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
             )
         }.onFailure {
             Toast.makeText(this, "صفحه تنظیمات باز نشد", Toast.LENGTH_SHORT).show()
@@ -152,16 +202,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAccessibilitySettings() {
+        if (isMiui()) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("راهنمای Xiaomi / MIUI")
+                .setMessage(
+                    "۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n\n" +
+                    "۲. روی «برنامه‌های بارگیری‌شده» ضربه بزنید\n\n" +
+                    "۳. «سرویس استخراج لینک» را پیدا و فعال کنید\n\n" +
+                    "⚠ اگر برنامه در لیست نبود:\n" +
+                    "تنظیمات MIUI ← مجوزهای برنامه ← برنامه را جستجو کنید ← " +
+                    "«دسترس‌پذیری» را مجاز کنید"
+                )
+                .setPositiveButton("باز کردن تنظیمات") { _, _ -> launchAccessibilitySettings() }
+                .setNegativeButton("لغو", null)
+                .show()
+        } else {
+            launchAccessibilitySettings()
+        }
+    }
+
+    private fun launchAccessibilitySettings() {
         runCatching {
             accessibilityLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            Snackbar.make(
-                binding.root,
-                "«${getString(R.string.app_name)}» را در لیست پیدا کرده و فعال کنید",
-                Snackbar.LENGTH_LONG
-            ).show()
         }.onFailure {
             Toast.makeText(this, "صفحه تنظیمات باز نشد", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // ── MIUI Detection ─────────────────────────────────────────────────────────
+
+    private fun isMiui(): Boolean = try {
+        val prop = Class.forName("android.os.SystemProperties")
+            .getMethod("get", String::class.java, String::class.java)
+        val version = prop.invoke(null, "ro.miui.ui.version.name", "") as String
+        version.isNotEmpty()
+    } catch (_: Exception) {
+        false
     }
 
     // ── UI Updates ─────────────────────────────────────────────────────────────
@@ -170,7 +246,6 @@ class MainActivity : AppCompatActivity() {
         updatePermissionUI()
         updateSelectedAppsUI()
         refreshLinkHistory()
-        // Reflect persisted service state
         val active = PrefsManager.isServiceActive(this)
         updateServiceStatus(active)
     }
@@ -179,21 +254,19 @@ class MainActivity : AppCompatActivity() {
         val overlayOk = hasOverlayPermission()
         val accessOk  = hasAccessibilityPermission()
 
-        // Overlay
         with(binding) {
             if (overlayOk) {
-                tvOverlayStatus.text      = getString(R.string.permission_overlay_ok)
+                tvOverlayStatus.text = getString(R.string.permission_overlay_ok)
                 tvOverlayStatus.setTextColor(getColor(R.color.green))
-                btnOverlay.isEnabled      = false
-                btnOverlay.alpha          = 0.5f
+                btnOverlay.isEnabled = false
+                btnOverlay.alpha     = 0.5f
             } else {
-                tvOverlayStatus.text      = getString(R.string.permission_overlay_no)
+                tvOverlayStatus.text = getString(R.string.permission_overlay_no)
                 tvOverlayStatus.setTextColor(getColor(R.color.red))
-                btnOverlay.isEnabled      = true
-                btnOverlay.alpha          = 1f
+                btnOverlay.isEnabled = true
+                btnOverlay.alpha     = 1f
             }
 
-            // Accessibility
             if (accessOk) {
                 tvAccessibilityStatus.text = getString(R.string.permission_accessibility_ok)
                 tvAccessibilityStatus.setTextColor(getColor(R.color.green))
@@ -206,7 +279,6 @@ class MainActivity : AppCompatActivity() {
                 btnAccessibility.alpha     = 1f
             }
 
-            // Start button only active when both permissions are granted
             btnStartService.isEnabled = overlayOk && accessOk
             btnStartService.alpha     = if (overlayOk && accessOk) 1f else 0.5f
         }
@@ -241,8 +313,8 @@ class MainActivity : AppCompatActivity() {
         val links = PrefsManager.getLinkHistory(this)
         linkAdapter.updateLinks(links)
         with(binding) {
-            tvEmptyLinks.isVisible = links.isEmpty()
-            rvLinks.isVisible      = links.isNotEmpty()
+            tvEmptyLinks.isVisible    = links.isEmpty()
+            rvLinks.isVisible         = links.isNotEmpty()
             btnClearHistory.isVisible = links.isNotEmpty()
         }
     }

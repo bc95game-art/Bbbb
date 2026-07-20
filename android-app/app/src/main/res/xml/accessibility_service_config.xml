@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Accessibility service config.
+    - No android:packageNames → monitors ALL packages (needed for cross-app link capture)
+    - flagReportViewIds required to read view IDs for URL-bar detection
+    - flagIncludeNotImportantViews to catch hidden/internal nodes
+    - flagRetrieveInteractiveWindows to access all windows at once
+    - No android:settingsActivity to avoid MIUI compatibility issues
+-->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged|typeViewScrolled"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled|typeViewTextChanged|typeViewClicked"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
-    android:notificationTimeout="100"
-    android:settingsActivity=".MainActivity" />
+    android:notificationTimeout="100" />
