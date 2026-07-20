@@ -24,8 +24,12 @@ import com.google.android.material.floatingactionbutton.ExtendedFloatingActionBu
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 
 /**
- * Foreground service that displays a draggable floating button
- * overlay on top of all other apps.
+ * Foreground service that displays a draggable floating button overlay.
+ *
+ * The floating button has two modes:
+ *  • Manual extract  — user taps "🔗 استخراج" → scans and copies the best link
+ *  • Auto-capture    — listens to IntentMonitorReceiver broadcasts and shows a
+ *                      badge count when new links arrive automatically
  */
 class FloatingWindowService : Service() {
 
@@ -34,8 +38,7 @@ class FloatingWindowService : Service() {
         const val NOTIF_ID = 1001
 
         fun start(context: Context) {
-            val intent = Intent(context, FloatingWindowService::class.java)
-            context.startForegroundService(intent)
+            context.startForegroundService(Intent(context, FloatingWindowService::class.java))
         }
 
         fun stop(context: Context) {
@@ -45,6 +48,10 @@ class FloatingWindowService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var floatingView: View? = null
+    private var btnExtract: ExtendedFloatingActionButton? = null
+
+    // Count of links auto-captured since last user dismiss
+    private var autoCapturedCount = 0
 
     // ── Service Lifecycle ──────────────────────────────────────────────────────
 
@@ -82,21 +89,27 @@ class FloatingWindowService : Service() {
         }
 
         floatingView = LayoutInflater.from(this).inflate(R.layout.floating_window, null)
+        btnExtract = floatingView!!.findViewById(R.id.btnExtract)
 
         // ── Drag support ──────────────────────────────────────────────────────
         var initialX = 0; var initialY = 0
         var initialTouchX = 0f; var initialTouchY = 0f
+        var isDragging = false
 
         floatingView!!.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params.x; initialY = params.y
                     initialTouchX = event.rawX; initialTouchY = event.rawY
+                    isDragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    params.x = initialX + (initialTouchX - event.rawX).toInt()
-                    params.y = initialY + (event.rawY - initialTouchY).toInt()
+                    val dx = (initialTouchX - event.rawX).toInt()
+                    val dy = (event.rawY - initialTouchY).toInt()
+                    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) isDragging = true
+                    params.x = initialX + dx
+                    params.y = initialY + dy
                     windowManager.updateViewLayout(floatingView, params)
                     true
                 }
@@ -105,28 +118,40 @@ class FloatingWindowService : Service() {
         }
 
         // ── Extract button ────────────────────────────────────────────────────
-        floatingView!!.findViewById<ExtendedFloatingActionButton>(R.id.btnExtract)
-            .setOnClickListener {
-                performExtraction()
-            }
+        btnExtract!!.setOnClickListener {
+            if (!isDragging) performExtraction()
+        }
 
         // ── Close button ──────────────────────────────────────────────────────
         floatingView!!.findViewById<FloatingActionButton>(R.id.btnClose)
-            .setOnClickListener {
-                stopSelf()
-            }
+            .setOnClickListener { stopSelf() }
 
         windowManager.addView(floatingView, params)
     }
 
     private fun removeFloatingButton() {
-        floatingView?.let {
-            try { windowManager.removeView(it) } catch (_: Exception) {}
-        }
+        floatingView?.let { try { windowManager.removeView(it) } catch (_: Exception) {} }
         floatingView = null
+        btnExtract = null
     }
 
-    // ── Extraction ─────────────────────────────────────────────────────────────
+    // ── Auto-capture badge ─────────────────────────────────────────────────────
+
+    /**
+     * Called when IntentMonitorReceiver or AccessibilityService captures links
+     * automatically (without the user pressing the button).
+     */
+    private fun onAutoCapture(links: List<String>) {
+        autoCapturedCount += links.size
+        // Update button label to show count
+        val label = if (autoCapturedCount > 0)
+            "🔗 استخراج ($autoCapturedCount)"
+        else
+            "🔗 استخراج"
+        btnExtract?.text = label
+    }
+
+    // ── Manual Extraction ──────────────────────────────────────────────────────
 
     private fun performExtraction() {
         val service = LinkAccessibilityService.instance
@@ -135,33 +160,47 @@ class FloatingWindowService : Service() {
             return
         }
 
-        val links = service.extractCurrentLinks()
+        // Merge: manually scanned + auto-captured from intents
+        val scanned = service.extractCurrentLinks().toMutableList()
+        val history = PrefsManager.getLinkHistory(this)
+        // Include the most-recent auto-captured links that aren't already in scanned
+        history.take(autoCapturedCount).forEach { if (it !in scanned) scanned.add(0, it) }
 
-        if (links.isEmpty()) {
+        if (scanned.isEmpty()) {
             Toast.makeText(this, getString(R.string.no_link_found), Toast.LENGTH_SHORT).show()
             return
         }
 
-        // Save each link
-        links.forEach { PrefsManager.addLink(this, it) }
+        // Save all
+        scanned.forEach { PrefsManager.addLink(this, it) }
 
-        // Copy first (most relevant) link to clipboard
+        // Copy the first (freshest) link
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("extracted_link", links[0]))
+        clipboard.setPrimaryClip(ClipData.newPlainText("extracted_link", scanned[0]))
 
-        val msg = if (links.size == 1) {
-            "✓ لینک کپی شد:\n${links[0].take(60)}"
-        } else {
-            "✓ ${links.size} لینک پیدا شد! اولین لینک کپی شد."
+        // Reset badge
+        autoCapturedCount = 0
+        btnExtract?.text = "🔗 استخراج"
+
+        val msg = when {
+            scanned.size == 1 -> "✓ لینک کپی شد:\n${scanned[0].take(70)}"
+            else -> "✓ ${scanned.size} لینک پیدا شد!\nاولین لینک کپی شد."
         }
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
 
     // ── Broadcast Receiver ─────────────────────────────────────────────────────
 
+    /**
+     * Listens for links captured automatically by IntentMonitorReceiver or
+     * the enhanced AccessibilityService window-scan.
+     */
     private val linkReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            // Links are handled via Toast in performExtraction()
+            val links = intent
+                ?.getStringArrayListExtra(LinkAccessibilityService.EXTRA_LINKS)
+                ?: return
+            if (links.isNotEmpty()) onAutoCapture(links)
         }
     }
 
@@ -177,11 +216,8 @@ class FloatingWindowService : Service() {
             CHANNEL_ID,
             "سرویس استخراج لینک",
             NotificationManager.IMPORTANCE_LOW
-        ).apply {
-            description = "نمایش وضعیت سرویس شناور"
-        }
-        getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(channel)
+        ).apply { description = "نمایش وضعیت سرویس شناور" }
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
     private fun buildNotification(): Notification {
@@ -192,7 +228,7 @@ class FloatingWindowService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("استخراج لینک")
-            .setContentText("سرویس فعال است — دکمه شناور روی برنامه‌ها نمایش داده می‌شود")
+            .setContentText("سرویس فعال — دکمه شناور روی برنامه‌ها نمایش داده می‌شود")
             .setSmallIcon(android.R.drawable.ic_menu_search)
             .setContentIntent(openIntent)
             .setOngoing(true)
