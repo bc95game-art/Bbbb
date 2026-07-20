@@ -3,27 +3,53 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:padding="8dp"
+    android:padding="10dp"
     android:gravity="center_vertical"
     android:background="?attr/selectableItemBackground">
 
+    <!-- Index badge -->
+    <TextView
+        android:id="@+id/tvLinkIndex"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:gravity="center"
+        android:textSize="11sp"
+        android:textColor="@color/on_primary"
+        android:textStyle="bold"
+        android:background="@drawable/badge_bg"
+        android:layout_marginEnd="10dp" />
+
+    <!-- URL text -->
     <TextView
         android:id="@+id/tvLink"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:textSize="13sp"
+        android:textSize="12sp"
         android:textColor="@color/primary"
         android:singleLine="true"
-        android:ellipsize="end"
-        android:paddingEnd="8dp" />
+        android:ellipsize="middle"
+        android:paddingEnd="6dp" />
 
+    <!-- Open in browser -->
+    <ImageView
+        android:id="@+id/btnOpenLink"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
+        android:src="@android:drawable/ic_menu_view"
+        android:padding="4dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="باز کردن"
+        android:layout_marginEnd="4dp" />
+
+    <!-- Copy -->
     <ImageView
         android:id="@+id/btnCopyLink"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+        android:layout_width="30dp"
+        android:layout_height="30dp"
         android:src="@android:drawable/ic_menu_share"
         android:padding="4dp"
         android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="کپی" />
+
 </LinearLayout>

@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 
 class AppAdapter(private val apps: MutableList<AppInfo>) :
@@ -15,8 +16,8 @@ class AppAdapter(private val apps: MutableList<AppInfo>) :
 
     class AppVH(view: View) : RecyclerView.ViewHolder(view) {
         val ivIcon: ImageView = view.findViewById(R.id.ivAppIcon)
-        val tvName: TextView = view.findViewById(R.id.tvAppName)
-        val tvPkg: TextView = view.findViewById(R.id.tvPackageName)
+        val tvName: TextView  = view.findViewById(R.id.tvAppName)
+        val tvPkg: TextView   = view.findViewById(R.id.tvPackageName)
         val cbSelected: CheckBox = view.findViewById(R.id.cbSelected)
     }
 
@@ -30,31 +31,48 @@ class AppAdapter(private val apps: MutableList<AppInfo>) :
         val app = filteredApps[position]
         holder.ivIcon.setImageDrawable(app.icon)
         holder.tvName.text = app.appName
-        holder.tvPkg.text = app.packageName
+        holder.tvPkg.text  = app.packageName
         holder.cbSelected.isChecked = app.isSelected
 
         holder.itemView.setOnClickListener {
             app.isSelected = !app.isSelected
             holder.cbSelected.isChecked = app.isSelected
-            // also update the original list
+            // Keep the master list in sync
             apps.find { it.packageName == app.packageName }?.isSelected = app.isSelected
         }
     }
 
     override fun getItemCount() = filteredApps.size
 
+    /** Filter by query and dispatch a DiffUtil diff for smooth animation. */
     fun filter(query: String) {
-        filteredApps = if (query.isBlank()) {
-            apps.toMutableList()
+        val newList: List<AppInfo> = if (query.isBlank()) {
+            apps.toList()
         } else {
             apps.filter {
                 it.appName.contains(query, ignoreCase = true) ||
                 it.packageName.contains(query, ignoreCase = true)
-            }.toMutableList()
+            }
         }
-        notifyDataSetChanged()
+        val diff = DiffUtil.calculateDiff(AppDiffCallback(filteredApps, newList))
+        filteredApps = newList.toMutableList()
+        diff.dispatchUpdatesTo(this)
     }
 
     fun getSelectedPackages(): Set<String> =
         apps.filter { it.isSelected }.map { it.packageName }.toSet()
+
+    // ── DiffUtil ───────────────────────────────────────────────────────────────
+
+    private class AppDiffCallback(
+        private val old: List<AppInfo>,
+        private val new: List<AppInfo>
+    ) : DiffUtil.Callback() {
+        override fun getOldListSize() = old.size
+        override fun getNewListSize() = new.size
+        override fun areItemsTheSame(o: Int, n: Int) =
+            old[o].packageName == new[n].packageName
+        override fun areContentsTheSame(o: Int, n: Int) =
+            old[o].isSelected == new[o].isSelected && old[o].appName == new[n].appName
+    }
 }

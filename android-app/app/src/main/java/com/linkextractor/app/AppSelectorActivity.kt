@@ -2,82 +2,147 @@ package com.linkextractor.app
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.TextInputEditText
-import androidx.recyclerview.widget.RecyclerView
+import com.linkextractor.app.databinding.ActivityAppSelectorBinding
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class AppSelectorActivity : AppCompatActivity() {
 
-    private lateinit var rvApps: RecyclerView
-    private lateinit var etSearch: TextInputEditText
-    private lateinit var btnSave: MaterialButton
+    private lateinit var binding: ActivityAppSelectorBinding
     private lateinit var adapter: AppAdapter
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_app_selector)
+        binding = ActivityAppSelectorBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         supportActionBar?.apply {
             title = getString(R.string.select_apps)
             setDisplayHomeAsUpEnabled(true)
         }
 
-        rvApps = findViewById(R.id.rvApps)
-        etSearch = findViewById(R.id.etSearch)
-        btnSave = findViewById(R.id.btnSave)
+        setupRecyclerView()
+        setupSearch()
+        setupSaveButton()
+        loadApps()   // async
+    }
 
-        loadApps()
+    override fun onSupportNavigateUp(): Boolean { finish(); return true }
 
-        etSearch.addTextChangedListener(object : TextWatcher {
+    // ── RecyclerView ───────────────────────────────────────────────────────────
+
+    private fun setupRecyclerView() {
+        adapter = AppAdapter(mutableListOf())
+        binding.rvApps.apply {
+            layoutManager = LinearLayoutManager(this@AppSelectorActivity)
+            adapter = this@AppSelectorActivity.adapter
+        }
+    }
+
+    // ── Search ─────────────────────────────────────────────────────────────────
+
+    private fun setupSearch() {
+        binding.etSearch.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun afterTextChanged(s: Editable?) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
                 adapter.filter(s?.toString() ?: "")
+                val count = adapter.itemCount
+                binding.tvResultCount.text = if (count > 0) "$count برنامه" else ""
+                binding.tvEmptyApps.isVisible = count == 0
             }
-            override fun afterTextChanged(s: Editable?) {}
         })
+    }
 
-        btnSave.setOnClickListener {
-            PrefsManager.setSelectedApps(this, adapter.getSelectedPackages())
+    // ── Save ───────────────────────────────────────────────────────────────────
+
+    private fun setupSaveButton() {
+        binding.btnSave.setOnClickListener {
+            val selected = adapter.getSelectedPackages()
+            PrefsManager.setSelectedApps(this, selected)
+            val msg = if (selected.isEmpty()) "همه برنامه‌ها پایش می‌شوند"
+                      else "${selected.size} برنامه انتخاب شد"
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
             setResult(RESULT_OK)
             finish()
         }
     }
 
-    override fun onSupportNavigateUp(): Boolean {
-        finish()
-        return true
-    }
+    // ── Load Apps (async) ──────────────────────────────────────────────────────
 
     private fun loadApps() {
-        val pm = packageManager
-        val selectedApps = PrefsManager.getSelectedApps(this)
+        binding.progressBar.isVisible = true
+        binding.rvApps.isVisible      = false
+        binding.tvEmptyApps.isVisible = false
 
-        // Get all installed apps (excluding system apps for cleaner list)
-        val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
-            .mapNotNull { appInfo ->
-                try {
-                    AppInfo(
-                        packageName = appInfo.packageName,
-                        appName = pm.getApplicationLabel(appInfo).toString(),
-                        icon = pm.getApplicationIcon(appInfo.packageName),
-                        isSelected = appInfo.packageName in selectedApps
+        CoroutineScope(Dispatchers.IO).launch {
+            val selectedApps = PrefsManager.getSelectedApps(this@AppSelectorActivity)
+            val pm = packageManager
+            val apps = try {
+                getInstalledUserApps(pm)
+                    .mapNotNull { appInfo ->
+                        runCatching {
+                            AppInfo(
+                                packageName = appInfo.packageName,
+                                appName     = pm.getApplicationLabel(appInfo).toString(),
+                                icon        = pm.getApplicationIcon(appInfo.packageName),
+                                isSelected  = appInfo.packageName in selectedApps
+                            )
+                        }.getOrNull()
+                    }
+                    .sortedWith(
+                        compareByDescending<AppInfo> { it.isSelected }.thenBy { it.appName }
                     )
-                } catch (_: Exception) { null }
+            } catch (e: Exception) {
+                emptyList()
             }
-            .sortedWith(
-                compareByDescending<AppInfo> { it.isSelected }
-                    .thenBy { it.appName }
-            )
-            .toMutableList()
 
-        adapter = AppAdapter(apps)
-        rvApps.layoutManager = LinearLayoutManager(this)
-        rvApps.adapter = adapter
+            withContext(Dispatchers.Main) {
+                binding.progressBar.isVisible = false
+
+                if (apps.isEmpty()) {
+                    binding.tvEmptyApps.isVisible = true
+                    binding.tvEmptyApps.text      = "برنامه‌ای یافت نشد"
+                } else {
+                    binding.rvApps.isVisible = true
+                    adapter = AppAdapter(apps.toMutableList())
+                    binding.rvApps.adapter  = adapter
+                    binding.tvResultCount.text = "${apps.size} برنامه"
+                }
+            }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getInstalledUserApps(pm: PackageManager): List<ApplicationInfo> {
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+        else
+            PackageManager.GET_META_DATA
+
+        val all: List<ApplicationInfo> = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            pm.getInstalledApplications(
+                PackageManager.ApplicationInfoFlags.of(PackageManager.GET_META_DATA.toLong())
+            )
+        } else {
+            pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        }
+
+        // Exclude pure system apps, but keep system apps that have a user activity
+        return all.filter { info ->
+            val isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            val isUpdated = (info.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+            !isSystem || isUpdated
+        }
     }
 }

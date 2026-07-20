@@ -3,36 +3,28 @@
     <string name="app_name">استخراج لینک</string>
     <string name="select_apps">انتخاب برنامه‌ها</string>
     <string name="accessibility_service_label">سرویس استخراج لینک</string>
-    <string name="accessibility_service_description">این سرویس لینک‌های پنهان را از برنامه‌های انتخاب شده شناسایی و استخراج می‌کند.</string>
+    <string name="accessibility_service_description">این سرویس لینک‌های پنهان را از برنامه‌های انتخاب‌شده شناسایی و استخراج می‌کند.</string>
 
-    <!-- Main Screen -->
+    <!-- Status -->
     <string name="status_active">● سرویس فعال است</string>
     <string name="status_inactive">● سرویس غیرفعال است</string>
-    <string name="btn_enable_accessibility">فعال‌سازی سرویس دسترس‌پذیری</string>
-    <string name="btn_enable_overlay">مجوز نمایش روی برنامه‌ها</string>
-    <string name="btn_select_apps">انتخاب برنامه‌های هدف</string>
-    <string name="btn_start_service">شروع سرویس شناور</string>
-    <string name="btn_stop_service">توقف سرویس شناور</string>
-    <string name="permission_overlay_ok">✓ مجوز نمایش روی برنامه‌ها: فعال</string>
-    <string name="permission_overlay_no">✗ مجوز نمایش روی برنامه‌ها: غیرفعال</string>
+
+    <!-- Permissions -->
+    <string name="permission_overlay_ok">✓ نمایش روی برنامه‌ها: فعال</string>
+    <string name="permission_overlay_no">✗ نمایش روی برنامه‌ها: غیرفعال</string>
     <string name="permission_accessibility_ok">✓ سرویس دسترس‌پذیری: فعال</string>
     <string name="permission_accessibility_no">✗ سرویس دسترس‌پذیری: غیرفعال</string>
-    <string name="selected_apps_count">برنامه‌های انتخاب‌شده: %d</string>
-    <string name="no_apps_selected">هنوز برنامه‌ای انتخاب نشده</string>
 
-    <!-- App Selector -->
+    <!-- Main screen -->
+    <string name="btn_select_apps">انتخاب برنامه‌های هدف</string>
+    <string name="btn_save">ذخیره انتخاب‌ها</string>
+    <string name="selected_apps_count">%d برنامه انتخاب‌شده</string>
+    <string name="no_apps_selected">همه برنامه‌ها</string>
+
+    <!-- App selector -->
     <string name="search_hint">جستجوی برنامه…</string>
-    <string name="btn_save">ذخیره</string>
 
-    <!-- Floating Button -->
-    <string name="btn_extract">استخراج لینک</string>
-    <string name="extracting">در حال استخراج…</string>
-    <string name="link_copied">لینک کپی شد!</string>
-    <string name="no_link_found">لینکی پیدا نشد</string>
-    <string name="close">✕</string>
-
-    <!-- Dialog -->
-    <string name="extracted_links_title">لینک‌های استخراج‌شده</string>
-    <string name="copy_all">کپی همه</string>
-    <string name="close_dialog">بستن</string>
+    <!-- Floating button -->
+    <string name="no_link_found">🔍 لینکی در این صفحه پیدا نشد</string>
+    <string name="close">بستن</string>
 </resources>

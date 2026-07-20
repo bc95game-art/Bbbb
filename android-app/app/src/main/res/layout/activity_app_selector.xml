@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:background="@color/background"
-    android:layoutDirection="rtl">
+    android:layoutDirection="locale">
 
     <!-- Search Bar -->
     <com.google.android.material.textfield.TextInputLayout
@@ -12,15 +13,48 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="@string/search_hint"
-        android:padding="12dp">
+        android:layout_margin="12dp"
+        app:startIconDrawable="@android:drawable/ic_menu_search">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/etSearch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:imeOptions="actionSearch"
-            android:inputType="text" />
+            android:inputType="text"
+            android:singleLine="true" />
     </com.google.android.material.textfield.TextInputLayout>
+
+    <!-- Result count -->
+    <TextView
+        android:id="@+id/tvResultCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="6dp"
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary" />
+
+    <!-- Loading -->
+    <ProgressBar
+        android:id="@+id/progressBar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        android:layout_marginTop="48dp"
+        android:visibility="gone" />
+
+    <!-- Empty state -->
+    <TextView
+        android:id="@+id/tvEmptyApps"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:padding="32dp"
+        android:text="برنامه‌ای یافت نشد"
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp"
+        android:visibility="gone" />
 
     <!-- App List -->
     <androidx.recyclerview.widget.RecyclerView
@@ -28,16 +62,18 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp" />
+        android:clipToPadding="false"
+        android:padding="4dp" />
 
     <!-- Save Button -->
     <com.google.android.material.button.MaterialButton
-        style="@style/Widget.MaterialComponents.Button"
         android:id="@+id/btnSave"
+        style="@style/Widget.MaterialComponents.Button"
         android:layout_width="match_parent"
         android:layout_height="52dp"
         android:layout_margin="16dp"
         android:text="@string/btn_save"
-        android:textSize="16sp" />
+        android:textSize="15sp"
+        app:cornerRadius="14dp" />
 
 </LinearLayout>
