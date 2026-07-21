@@ -39,6 +39,13 @@
             android:label="@string/select_apps"
             android:parentActivityName=".MainActivity" />
 
+        <!-- LADB Setup Wizard -->
+        <activity
+            android:name=".LadbSetupActivity"
+            android:exported="false"
+            android:label="راهنمای فعال‌سازی"
+            android:parentActivityName=".MainActivity" />
+
         <!-- Floating Window Foreground Service -->
         <service
             android:name=".FloatingWindowService"

@@ -2,8 +2,6 @@ package com.linkextractor.app
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.BroadcastReceiver
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -218,40 +216,14 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * MIUI + Android 13+: مرکز امنیت MIUI نیز "تنظیم محدودشده" نشان می‌دهد.
-     * راه‌حل: دستور appops از طریق ADB (بدون کامپیوتر: LADB).
+     * راه‌حل: باز کردن صفحه راهنمای LADB.
      */
     private fun showMiuiOverlayAdbDialog() {
-        val adbCommand = "appops set $packageName SYSTEM_ALERT_WINDOW allow"
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle("⚠ Xiaomi — مجوز نمایش شناور قفل است")
-            .setMessage(
-                "شیومی (Android 13+) این مجوز را برای APK‌های sideload مسدود می‌کند.\n" +
-                "حتی در مرکز امنیت MIUI هم «تنظیم محدودشده» نشان داده می‌شود.\n\n" +
-                "━━━━━━━━━━━━━━━\n" +
-                "✅ روش ۱ — بدون کامپیوتر (LADB)\n\n" +
-                "۱. «حالت توسعه‌دهنده» را فعال کنید:\n" +
-                "   تنظیمات ← درباره گوشی ← ۷ بار روی «نسخه MIUI» بزنید\n\n" +
-                "۲. بروید: تنظیمات ← گزینه‌های توسعه‌دهنده\n" +
-                "   «اشکال‌زدایی بی‌سیم» را روشن کنید\n\n" +
-                "۳. برنامه LADB را از پلی‌استور نصب کنید\n\n" +
-                "۴. LADB را باز کنید، «Pair» را بزنید، کد و پورت را از\n" +
-                "   «اشکال‌زدایی بی‌سیم» وارد کنید\n\n" +
-                "۵. دکمه «کپی دستور» را بزنید، در LADB جای‌گذاری و اجرا کنید\n\n" +
-                "━━━━━━━━━━━━━━━\n" +
-                "روش ۲ — با کامپیوتر:\n" +
-                "adb shell $adbCommand"
-            )
-            .setPositiveButton("تنظیمات استاندارد") { _, _ -> launchOverlaySettings() }
-            .setNeutralButton("کپی دستور") { _, _ ->
-                val clipboard = getSystemService(ClipboardManager::class.java)
-                clipboard?.setPrimaryClip(
-                    ClipData.newPlainText("ADB command", adbCommand)
-                )
-                Toast.makeText(this, "دستور کپی شد — در LADB جای‌گذاری کنید ✓", Toast.LENGTH_LONG).show()
+        overlayLauncher.launch(
+            Intent(this, LadbSetupActivity::class.java).apply {
+                putExtra(LadbSetupActivity.EXTRA_MODE, LadbSetupActivity.MODE_OVERLAY)
             }
-            .setNegativeButton("لغو", null)
-            .show()
+        )
     }
 
     /** Opens MIUI Security Center directly on the app's permission page. */
@@ -323,43 +295,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * MIUI + Android 13+: Xiaomi disables the "Allow restricted settings" toggle for
-     * sideloaded APKs. Show options: LADB (no PC), or classic ADB with PC.
+     * MIUI + Android 13+: باز کردن صفحه راهنمای گام‌به‌گام LADB برای دسترس‌پذیری.
      */
     private fun showMiuiAdbDialog() {
-        val serviceComponent =
-            "$packageName/com.linkextractor.app.LinkAccessibilityService"
-        val adbCommand =
-            "settings put secure enabled_accessibility_services $serviceComponent"
-
-        MaterialAlertDialogBuilder(this)
-            .setTitle("⚠ Xiaomi — تنظیمات دسترس‌پذیری قفل است")
-            .setMessage(
-                "شیومی این سرویس را برای APK‌های sideload مسدود می‌کند.\n\n" +
-                "━━━━━━━━━━━━━━━\n" +
-                "✅ روش ۱ — بدون کامپیوتر (LADB)\n\n" +
-                "۱. «برنامه‌نویسی» را در تنظیمات فعال کنید:\n" +
-                "   تنظیمات ← درباره گوشی ← ۷ بار روی «نسخه MIUI» بزنید\n\n" +
-                "۲. بروید: تنظیمات ← گزینه‌های توسعه‌دهنده\n" +
-                "   «اشکال‌زدایی بی‌سیم» را روشن کنید\n\n" +
-                "۳. برنامه LADB را از پلی‌استور نصب کنید\n\n" +
-                "۴. LADB را باز کنید، «Pair» را بزنید، کد و پورت را از\n" +
-                "   «اشکال‌زدایی بی‌سیم» وارد کنید\n\n" +
-                "۵. دکمه «کپی دستور» را بزنید، در LADB جای‌گذاری و اجرا کنید\n\n" +
-                "━━━━━━━━━━━━━━━\n" +
-                "روش ۲ — با کامپیوتر:\n" +
-                "دستور را در CMD اجرا کنید: adb shell " + adbCommand
-            )
-            .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
-            .setNeutralButton("کپی دستور") { _, _ ->
-                val clipboard = getSystemService(ClipboardManager::class.java)
-                clipboard?.setPrimaryClip(
-                    ClipData.newPlainText("ADB command", adbCommand)
-                )
-                Toast.makeText(this, "دستور کپی شد — در LADB جای‌گذاری کنید ✓", Toast.LENGTH_LONG).show()
+        accessibilityLauncher.launch(
+            Intent(this, LadbSetupActivity::class.java).apply {
+                putExtra(LadbSetupActivity.EXTRA_MODE, LadbSetupActivity.MODE_ACCESSIBILITY)
             }
-            .setNegativeButton("لغو", null)
-            .show()
+        )
     }
 
     private fun launchAppInfo() {

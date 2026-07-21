@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:layoutDirection="locale">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- ─── Header ──────────────────────────────────────────────────────── -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="3dp"
+            app:cardBackgroundColor="#FFF3E0">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚠ چرا این مرحله لازم است؟"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="#E65100"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="شیومی (MIUI/HyperOS) روی Android 13+ برای برنامه‌هایی که از فروشگاه نصب نشده‌اند، برخی مجوزهای خاص را مسدود می‌کند.\n\nتنها راه فعال‌سازی، اجرای یک دستور از طریق ابزار LADB است. این کار یک‌بار انجام می‌شود و دیگر نیاز نیست تکرار شود."
+                    android:textSize="13sp"
+                    android:textColor="#BF360C"
+                    android:lineSpacingExtra="4dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- ─── Steps ────────────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="مراحل (فقط یک‌بار)"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginBottom="10dp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvSteps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:nestedScrollingEnabled="false" />
+
+        <!-- ─── Command Box ──────────────────────────────────────────────────── -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="دستور ADB"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="8dp" />
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="#263238">
+
+            <TextView
+                android:id="@+id/tvCommand"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="14dp"
+                android:text=""
+                android:textSize="12sp"
+                android:textColor="#80CBC4"
+                android:fontFamily="monospace"
+                android:textIsSelectable="true" />
+        </androidx.cardview.widget.CardView>
+
+        <!-- ─── Action Buttons ───────────────────────────────────────────────── -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCopyCommand"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="📋 کپی دستور — در LADB Paste کنید"
+            android:textSize="14sp"
+            android:layout_marginBottom="10dp"
+            app:cornerRadius="14dp"
+            app:backgroundTint="@color/primary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnInstallLabd"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="📲 نصب LADB از پلی‌استور"
+            android:textSize="13sp"
+            android:layout_marginBottom="10dp"
+            app:cornerRadius="12dp"
+            app:strokeColor="@color/primary"
+            android:textColor="@color/primary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDone"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:text="بازگشت به برنامه"
+            android:textColor="@color/text_secondary"
+            android:layout_marginBottom="8dp" />
+
+    </LinearLayout>
+</ScrollView>
