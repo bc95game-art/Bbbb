@@ -73,6 +73,6 @@ class AppAdapter(private val apps: MutableList<AppInfo>) :
         override fun areItemsTheSame(o: Int, n: Int) =
             old[o].packageName == new[n].packageName
         override fun areContentsTheSame(o: Int, n: Int) =
-            old[o].isSelected == new[o].isSelected && old[o].appName == new[n].appName
+            old[o].isSelected == new[n].isSelected && old[o].appName == new[n].appName
     }
 }

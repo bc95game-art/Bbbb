@@ -202,23 +202,53 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAccessibilitySettings() {
-        if (isMiui()) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("راهنمای Xiaomi / MIUI")
-                .setMessage(
-                    "۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n\n" +
-                    "۲. روی «برنامه‌های بارگیری‌شده» ضربه بزنید\n\n" +
-                    "۳. «سرویس استخراج لینک» را پیدا و فعال کنید\n\n" +
-                    "⚠ اگر برنامه در لیست نبود:\n" +
-                    "تنظیمات MIUI ← مجوزهای برنامه ← برنامه را جستجو کنید ← " +
-                    "«دسترس‌پذیری» را مجاز کنید"
-                )
-                .setPositiveButton("باز کردن تنظیمات") { _, _ -> launchAccessibilitySettings() }
-                .setNegativeButton("لغو", null)
-                .show()
-        } else {
-            launchAccessibilitySettings()
+        // Android 13+ (API 33+) blocks accessibility services for sideloaded APKs
+        // behind "Restricted Settings". User must first allow it from App Info.
+        val needsRestrictedSettingsStep = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+        val message = buildString {
+            if (needsRestrictedSettingsStep) {
+                append("⚠ مرحله اول — فعال‌سازی «تنظیمات محدود» (Android 13+)\n\n")
+                append("۱. دکمه «باز کردن اطلاعات برنامه» را بزنید\n")
+                append("۲. روی آیکون سه‌نقطه ⋮ (گوشه بالا-راست) ضربه بزنید\n")
+                append("۳. گزینه «Allow restricted settings» را انتخاب کنید\n")
+                append("۴. سپس دکمه «باز کردن دسترس‌پذیری» را بزنید\n\n")
+                append("─────────────────\n\n")
+            }
+            if (isMiui()) {
+                append("راهنمای Xiaomi / MIUI\n\n")
+                append("۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n")
+                append("۲. روی «برنامه‌های بارگیری‌شده» ضربه بزنید\n")
+                append("۳. «سرویس استخراج لینک» را پیدا و فعال کنید\n\n")
+                append("⚠ اگر همچنان قفل بود، مراحل بالا (سه‌نقطه) را انجام دهید")
+            } else if (!needsRestrictedSettingsStep) {
+                append("۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n")
+                append("۲. «سرویس استخراج لینک» را پیدا و فعال کنید")
+            }
         }
+
+        val builder = MaterialAlertDialogBuilder(this)
+            .setTitle("فعال‌سازی سرویس دسترس‌پذیری")
+            .setMessage(message)
+            .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
+            .setNegativeButton("لغو", null)
+
+        if (needsRestrictedSettingsStep) {
+            builder.setNeutralButton("باز کردن اطلاعات برنامه") { _, _ ->
+                runCatching {
+                    accessibilityLauncher.launch(
+                        Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:$packageName")
+                        )
+                    )
+                }.onFailure {
+                    Toast.makeText(this, "صفحه اطلاعات برنامه باز نشد", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        builder.show()
     }
 
     private fun launchAccessibilitySettings() {
