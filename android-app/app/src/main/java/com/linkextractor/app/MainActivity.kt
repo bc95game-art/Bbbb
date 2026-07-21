@@ -174,9 +174,16 @@ class MainActivity : AppCompatActivity() {
             Snackbar.make(binding.root, "مجوز از قبل فعال است ✓", Snackbar.LENGTH_SHORT).show()
             return
         }
-        if (isMiui()) {
-            // MIUI/HyperOS: standard ACTION_MANAGE_OVERLAY_PERMISSION often doesn't work.
-            // The correct place is MIUI Security Center → App permissions → Other permissions.
+
+        val isMiuiDevice  = isMiui()
+        val isAndroid13Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+        if (isMiuiDevice && isAndroid13Plus) {
+            // MIUI + Android 13+: حتی مرکز امنیت MIUI هم "تنظیم محدودشده" نشان می‌دهد.
+            // تنها راه بدون روت، دستور ADB از طریق LADB یا کامپیوتر است.
+            showMiuiOverlayAdbDialog()
+        } else if (isMiuiDevice) {
+            // MIUI قدیمی‌تر: مرکز امنیت MIUI کار می‌کند
             MaterialAlertDialogBuilder(this)
                 .setTitle("مجوز نمایش شناور — Xiaomi")
                 .setMessage(
@@ -195,6 +202,44 @@ class MainActivity : AppCompatActivity() {
         } else {
             launchOverlaySettings()
         }
+    }
+
+    /**
+     * MIUI + Android 13+: مرکز امنیت MIUI نیز "تنظیم محدودشده" نشان می‌دهد.
+     * راه‌حل: دستور appops از طریق ADB (بدون کامپیوتر: LADB).
+     */
+    private fun showMiuiOverlayAdbDialog() {
+        val adbCommand = "appops set $packageName SYSTEM_ALERT_WINDOW allow"
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("⚠ Xiaomi — مجوز نمایش شناور قفل است")
+            .setMessage(
+                "شیومی (Android 13+) این مجوز را برای APK‌های sideload مسدود می‌کند.\n" +
+                "حتی در مرکز امنیت MIUI هم «تنظیم محدودشده» نشان داده می‌شود.\n\n" +
+                "━━━━━━━━━━━━━━━\n" +
+                "✅ روش ۱ — بدون کامپیوتر (LADB)\n\n" +
+                "۱. «حالت توسعه‌دهنده» را فعال کنید:\n" +
+                "   تنظیمات ← درباره گوشی ← ۷ بار روی «نسخه MIUI» بزنید\n\n" +
+                "۲. بروید: تنظیمات ← گزینه‌های توسعه‌دهنده\n" +
+                "   «اشکال‌زدایی بی‌سیم» را روشن کنید\n\n" +
+                "۳. برنامه LADB را از پلی‌استور نصب کنید\n\n" +
+                "۴. LADB را باز کنید، «Pair» را بزنید، کد و پورت را از\n" +
+                "   «اشکال‌زدایی بی‌سیم» وارد کنید\n\n" +
+                "۵. دکمه «کپی دستور» را بزنید، در LADB جای‌گذاری و اجرا کنید\n\n" +
+                "━━━━━━━━━━━━━━━\n" +
+                "روش ۲ — با کامپیوتر:\n" +
+                "adb shell $adbCommand"
+            )
+            .setPositiveButton("تنظیمات استاندارد") { _, _ -> launchOverlaySettings() }
+            .setNeutralButton("کپی دستور") { _, _ ->
+                val clipboard = getSystemService(ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(
+                    ClipData.newPlainText("ADB command", adbCommand)
+                )
+                Toast.makeText(this, "دستور کپی شد — در LADB جای‌گذاری کنید ✓", Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton("لغو", null)
+            .show()
     }
 
     /** Opens MIUI Security Center directly on the app's permission page. */
