@@ -2,6 +2,8 @@ package com.linkextractor.app
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -172,20 +174,43 @@ class MainActivity : AppCompatActivity() {
             Snackbar.make(binding.root, "مجوز از قبل فعال است ✓", Snackbar.LENGTH_SHORT).show()
             return
         }
-        // On MIUI, show extra guidance before opening settings
         if (isMiui()) {
+            // MIUI/HyperOS: standard ACTION_MANAGE_OVERLAY_PERMISSION often doesn't work.
+            // The correct place is MIUI Security Center → App permissions → Other permissions.
             MaterialAlertDialogBuilder(this)
-                .setTitle("راهنمای Xiaomi")
+                .setTitle("مجوز نمایش شناور — Xiaomi")
                 .setMessage(
-                    "۱. در صفحه بعد «مجاز کردن نمایش روی سایر برنامه‌ها» را روشن کنید\n\n" +
-                    "۲. سپس دکمه بازگشت را بزنید تا به برنامه برگردید"
+                    "روی Xiaomi باید از مرکز امنیت MIUI این مجوز را بدهید:\n\n" +
+                    "۱. دکمه «باز کردن مرکز امنیت» را بزنید\n" +
+                    "۲. در لیست، روی «استخراج لینک» ضربه بزنید\n" +
+                    "۳. گزینه «سایر مجوزها» را باز کنید\n" +
+                    "۴. «نمایش پنجره‌های شناور» را روشن کنید\n" +
+                    "۵. «باز کردن پنجره‌ها در پس‌زمینه» را هم روشن کنید\n\n" +
+                    "اگر مرکز امنیت باز نشد، دکمه «تنظیمات استاندارد» را بزنید."
                 )
-                .setPositiveButton("ادامه") { _, _ -> launchOverlaySettings() }
+                .setPositiveButton("باز کردن مرکز امنیت") { _, _ -> launchMiuiPermissionEditor() }
+                .setNeutralButton("تنظیمات استاندارد") { _, _ -> launchOverlaySettings() }
                 .setNegativeButton("لغو", null)
                 .show()
         } else {
             launchOverlaySettings()
         }
+    }
+
+    /** Opens MIUI Security Center directly on the app's permission page. */
+    private fun launchMiuiPermissionEditor() {
+        val launched = runCatching {
+            overlayLauncher.launch(
+                Intent("miui.intent.action.APP_PERM_EDITOR").apply {
+                    setClassName(
+                        "com.miui.securitycenter",
+                        "com.miui.permcenter.permissions.PermissionsEditorActivity"
+                    )
+                    putExtra("extra_pkgname", packageName)
+                }
+            )
+        }.isSuccess
+        if (!launched) launchOverlaySettings()
     }
 
     private fun launchOverlaySettings() {
@@ -202,53 +227,95 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAccessibilitySettings() {
-        // Android 13+ (API 33+) blocks accessibility services for sideloaded APKs
-        // behind "Restricted Settings". User must first allow it from App Info.
-        val needsRestrictedSettingsStep = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        val isMiuiDevice = isMiui()
+        val isAndroid13Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
-        val message = buildString {
-            if (needsRestrictedSettingsStep) {
-                append("⚠ مرحله اول — فعال‌سازی «تنظیمات محدود» (Android 13+)\n\n")
-                append("۱. دکمه «باز کردن اطلاعات برنامه» را بزنید\n")
-                append("۲. روی آیکون سه‌نقطه ⋮ (گوشه بالا-راست) ضربه بزنید\n")
-                append("۳. گزینه «Allow restricted settings» را انتخاب کنید\n")
-                append("۴. سپس دکمه «باز کردن دسترس‌پذیری» را بزنید\n\n")
-                append("─────────────────\n\n")
-            }
-            if (isMiui()) {
-                append("راهنمای Xiaomi / MIUI\n\n")
-                append("۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n")
-                append("۲. روی «برنامه‌های بارگیری‌شده» ضربه بزنید\n")
-                append("۳. «سرویس استخراج لینک» را پیدا و فعال کنید\n\n")
-                append("⚠ اگر همچنان قفل بود، مراحل بالا (سه‌نقطه) را انجام دهید")
-            } else if (!needsRestrictedSettingsStep) {
-                append("۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n")
-                append("۲. «سرویس استخراج لینک» را پیدا و فعال کنید")
-            }
+        if (isMiuiDevice && isAndroid13Plus) {
+            // MIUI + Android 13+: "Allow restricted settings" toggle is GREYED OUT by Xiaomi.
+            // The only reliable solution without root is ADB.
+            showMiuiAdbDialog()
+        } else if (isAndroid13Plus) {
+            // Stock Android 13+: toggle exists in App Info → ⋮ menu
+            MaterialAlertDialogBuilder(this)
+                .setTitle("فعال‌سازی سرویس دسترس‌پذیری")
+                .setMessage(
+                    "⚠ مرحله اول — اجازه تنظیمات محدود (Android 13+)\n\n" +
+                    "۱. دکمه «اطلاعات برنامه» را بزنید\n" +
+                    "۲. روی آیکون ⋮ (سه‌نقطه بالا-راست) ضربه بزنید\n" +
+                    "۳. «Allow restricted settings» را انتخاب کنید\n" +
+                    "۴. برگردید و دکمه «باز کردن دسترس‌پذیری» را بزنید"
+                )
+                .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
+                .setNeutralButton("اطلاعات برنامه") { _, _ -> launchAppInfo() }
+                .setNegativeButton("لغو", null)
+                .show()
+        } else if (isMiuiDevice) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle("راهنمای Xiaomi / MIUI")
+                .setMessage(
+                    "۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n" +
+                    "۲. روی «برنامه‌های بارگیری‌شده» ضربه بزنید\n" +
+                    "۳. «سرویس استخراج لینک» را پیدا و فعال کنید"
+                )
+                .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
+                .setNegativeButton("لغو", null)
+                .show()
+        } else {
+            launchAccessibilitySettings()
         }
+    }
 
-        val builder = MaterialAlertDialogBuilder(this)
-            .setTitle("فعال‌سازی سرویس دسترس‌پذیری")
-            .setMessage(message)
+    /**
+     * MIUI + Android 13+: Xiaomi disables the "Allow restricted settings" toggle for
+     * sideloaded APKs. The only reliable workaround without root is ADB.
+     * Show two ADB options: force-enable the service OR reinstall via ADB (clears the flag).
+     */
+    private fun showMiuiAdbDialog() {
+        val serviceComponent =
+            "$packageName/com.linkextractor.app.LinkAccessibilityService"
+        val adbEnable =
+            "adb shell settings put secure enabled_accessibility_services $serviceComponent"
+        val adbInstall =
+            "adb install -r app-debug.apk"
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("⚠ Xiaomi + Android 13 — تنظیمات محدود قفل است")
+            .setMessage(
+                "شیومی سوئیچ «Allow restricted settings» را برای APK‌های sideload قفل کرده.\n\n" +
+                "━━━━━━━━━━━━━━━\n" +
+                "روش ۱ — فعال‌سازی با ADB (نیاز به کامپیوتر)\n\n" +
+                "این دستور را در CMD/Terminal روی کامپیوتر اجرا کنید:\n\n" +
+                adbEnable + "\n\n" +
+                "━━━━━━━━━━━━━━━\n" +
+                "روش ۲ — نصب مجدد با ADB (پرچم محدودیت را پاک می‌کند):\n\n" +
+                adbInstall + "\n\n" +
+                "━━━━━━━━━━━━━━━\n" +
+                "روش ۳ — بدون کامپیوتر:\n" +
+                "وارد تنظیمات دسترس‌پذیری شوید و امتحان کنید شاید باز شود."
+            )
             .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
-            .setNegativeButton("لغو", null)
-
-        if (needsRestrictedSettingsStep) {
-            builder.setNeutralButton("باز کردن اطلاعات برنامه") { _, _ ->
-                runCatching {
-                    accessibilityLauncher.launch(
-                        Intent(
-                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            Uri.parse("package:$packageName")
-                        )
-                    )
-                }.onFailure {
-                    Toast.makeText(this, "صفحه اطلاعات برنامه باز نشد", Toast.LENGTH_SHORT).show()
-                }
+            .setNeutralButton("کپی دستور ADB") { _, _ ->
+                val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+                clipboard?.setPrimaryClip(
+                    android.content.ClipData.newPlainText("ADB command", adbEnable)
+                )
+                Toast.makeText(this, "دستور ADB کپی شد ✓", Toast.LENGTH_SHORT).show()
             }
-        }
+            .setNegativeButton("لغو", null)
+            .show()
+    }
 
-        builder.show()
+    private fun launchAppInfo() {
+        runCatching {
+            accessibilityLauncher.launch(
+                Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:$packageName")
+                )
+            )
+        }.onFailure {
+            Toast.makeText(this, "صفحه اطلاعات برنامه باز نشد", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun launchAccessibilitySettings() {
