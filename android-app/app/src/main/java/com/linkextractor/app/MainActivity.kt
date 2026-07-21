@@ -158,10 +158,22 @@ class MainActivity : AppCompatActivity() {
 
     private fun hasAccessibilityPermission(): Boolean {
         return try {
+            // روش اول: AccessibilityManager (استاندارد)
             val am = getSystemService(ACCESSIBILITY_SERVICE) as? AccessibilityManager
-                ?: return false
-            am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-                .any { it.resolveInfo.serviceInfo.packageName == packageName }
+            if (am != null) {
+                val enabledViaManager = am
+                    .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+                    .any { it.resolveInfo.serviceInfo.packageName == packageName }
+                if (enabledViaManager) return true
+            }
+            // روش دوم: خواندن مستقیم از Settings.Secure
+            // (روی MIUI بعد از ADB، AccessibilityManager ممکن است فوری آپدیت نشود)
+            val enabledServices = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: return false
+            val component = "$packageName/com.linkextractor.app.LinkAccessibilityService"
+            enabledServices.split(":").any { it.trim().equals(component, ignoreCase = true) }
         } catch (_: Exception) {
             false
         }
