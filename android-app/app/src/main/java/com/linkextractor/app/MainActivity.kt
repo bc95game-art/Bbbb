@@ -267,39 +267,39 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * MIUI + Android 13+: Xiaomi disables the "Allow restricted settings" toggle for
-     * sideloaded APKs. The only reliable workaround without root is ADB.
-     * Show two ADB options: force-enable the service OR reinstall via ADB (clears the flag).
+     * sideloaded APKs. Show options: LADB (no PC), or classic ADB with PC.
      */
     private fun showMiuiAdbDialog() {
         val serviceComponent =
             "$packageName/com.linkextractor.app.LinkAccessibilityService"
-        val adbEnable =
-            "adb shell settings put secure enabled_accessibility_services $serviceComponent"
-        val adbInstall =
-            "adb install -r app-debug.apk"
+        val adbCommand =
+            "settings put secure enabled_accessibility_services $serviceComponent"
 
         MaterialAlertDialogBuilder(this)
-            .setTitle("⚠ Xiaomi + Android 13 — تنظیمات محدود قفل است")
+            .setTitle("⚠ Xiaomi — تنظیمات دسترس‌پذیری قفل است")
             .setMessage(
-                "شیومی سوئیچ «Allow restricted settings» را برای APK‌های sideload قفل کرده.\n\n" +
+                "شیومی این سرویس را برای APK‌های sideload مسدود می‌کند.\n\n" +
                 "━━━━━━━━━━━━━━━\n" +
-                "روش ۱ — فعال‌سازی با ADB (نیاز به کامپیوتر)\n\n" +
-                "این دستور را در CMD/Terminal روی کامپیوتر اجرا کنید:\n\n" +
-                adbEnable + "\n\n" +
+                "✅ روش ۱ — بدون کامپیوتر (LADB)\n\n" +
+                "۱. «برنامه‌نویسی» را در تنظیمات فعال کنید:\n" +
+                "   تنظیمات ← درباره گوشی ← ۷ بار روی «نسخه MIUI» بزنید\n\n" +
+                "۲. بروید: تنظیمات ← گزینه‌های توسعه‌دهنده\n" +
+                "   «اشکال‌زدایی بی‌سیم» را روشن کنید\n\n" +
+                "۳. برنامه LADB را از پلی‌استور نصب کنید\n\n" +
+                "۴. LADB را باز کنید، «Pair» را بزنید، کد و پورت را از\n" +
+                "   «اشکال‌زدایی بی‌سیم» وارد کنید\n\n" +
+                "۵. دکمه «کپی دستور» را بزنید، در LADB جای‌گذاری و اجرا کنید\n\n" +
                 "━━━━━━━━━━━━━━━\n" +
-                "روش ۲ — نصب مجدد با ADB (پرچم محدودیت را پاک می‌کند):\n\n" +
-                adbInstall + "\n\n" +
-                "━━━━━━━━━━━━━━━\n" +
-                "روش ۳ — بدون کامپیوتر:\n" +
-                "وارد تنظیمات دسترس‌پذیری شوید و امتحان کنید شاید باز شود."
+                "روش ۲ — با کامپیوتر:\n" +
+                "دستور را در CMD اجرا کنید: adb shell " + adbCommand
             )
             .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
-            .setNeutralButton("کپی دستور ADB") { _, _ ->
-                val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+            .setNeutralButton("کپی دستور") { _, _ ->
+                val clipboard = getSystemService(ClipboardManager::class.java)
                 clipboard?.setPrimaryClip(
-                    android.content.ClipData.newPlainText("ADB command", adbEnable)
+                    ClipData.newPlainText("ADB command", adbCommand)
                 )
-                Toast.makeText(this, "دستور ADB کپی شد ✓", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "دستور کپی شد — در LADB جای‌گذاری کنید ✓", Toast.LENGTH_LONG).show()
             }
             .setNegativeButton("لغو", null)
             .show()
