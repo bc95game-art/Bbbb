@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Shizuku -->
+    <!-- Shizuku (optional) -->
     <queries>
         <package android:name="moe.shizuku.privileged.api" />
     </queries>
@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
@@ -44,24 +45,25 @@
             android:label="@string/select_apps"
             android:parentActivityName=".MainActivity" />
 
-        <!-- LADB Setup Wizard -->
-        <activity
-            android:name=".LadbSetupActivity"
-            android:exported="false"
-            android:label="راهنمای فعال‌سازی"
-            android:parentActivityName=".MainActivity" />
-
-        <!-- Floating Window Foreground Service -->
+        <!--
+            Floating Window Foreground Service
+            foregroundServiceType includes mediaProjection for screen capture
+        -->
         <service
             android:name=".FloatingWindowService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|mediaProjection">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Displays a floating overlay button to extract hidden links from target apps" />
+                android:value="Displays a floating overlay button to extract hidden links from target apps via screen capture" />
         </service>
 
-        <!-- Accessibility Service -->
+        <!--
+            Accessibility Service — OPTIONAL fallback only.
+            The main extraction method is MediaProjection (screen capture).
+            This service is kept for devices where it can be granted,
+            but is NOT required for the app to function.
+        -->
         <service
             android:name=".LinkAccessibilityService"
             android:exported="true"
@@ -83,23 +85,15 @@
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
-        <!--
-            Intent Monitor Receiver — دریافت لینک‌های اشتراک‌گذاری
-            فقط ACTION_SEND نگه داشتیم تا برنامه به عنوان مرورگر نمایش داده نشود.
-            لینک‌های http/https از طریق AccessibilityService شناسایی می‌شوند.
-        -->
+        <!-- Intent Monitor Receiver -->
         <receiver
             android:name=".IntentMonitorReceiver"
             android:exported="false">
-
-            <!-- لینک‌های به اشتراک گذاشته شده (مثلاً Share از تلگرام) -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
-
-            <!-- برادکست داخلی از AccessibilityService -->
             <intent-filter>
                 <action android:name="com.linkextractor.app.LINK_DETECTED" />
             </intent-filter>

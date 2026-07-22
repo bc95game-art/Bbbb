@@ -1,27 +1,23 @@
 package com.linkextractor.app
 
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.PixelFormat
-import android.net.Uri
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import android.view.WindowManager
-import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.linkextractor.app.databinding.ActivityMainBinding
-import rikka.shizuku.Shizuku
 
 class MainActivity : AppCompatActivity() {
 
@@ -34,15 +30,25 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { updateAllUI() }
 
-    private val accessibilityLauncher = registerForActivityResult(
+    /** درخواست مجوز ضبط صفحه از کاربر */
+    private val screenCaptureLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { updateAllUI() }
+    ) { result ->
+        if (result.resultCode == RESULT_OK && result.data != null) {
+            FloatingWindowService.projectionResultCode = result.resultCode
+            FloatingWindowService.projectionData       = result.data
+            updateAllUI()
+            Snackbar.make(binding.root, "✓ مجوز ضبط صفحه داده شد", Snackbar.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "مجوز ضبط صفحه رد شد", Toast.LENGTH_LONG).show()
+        }
+    }
 
     private val appSelectorLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { updateSelectedAppsUI() }
 
-    // ── Broadcast receiver ─────────────────────────────────────────────────────
+    // ── Broadcast Receiver ─────────────────────────────────────────────────────
 
     private val linkReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -63,27 +69,12 @@ class MainActivity : AppCompatActivity() {
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
-    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { _, result ->
-        if (result == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            activateAccessibilityViaShizuku()
-        } else {
-            Toast.makeText(this, "مجوز Shizuku رد شد", Toast.LENGTH_LONG).show()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         setupRecyclerView()
         setupClickListeners()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
-        ShizukuHelper.unbindService()
     }
 
     override fun onResume() {
@@ -124,7 +115,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupClickListeners() {
         binding.btnOverlay.setOnClickListener { requestOverlayPermission() }
-        binding.btnAccessibility.setOnClickListener { openAccessibilitySettings() }
+        binding.btnScreenCapture.setOnClickListener { requestScreenCapturePermission() }
         binding.btnSelectApps.setOnClickListener {
             appSelectorLauncher.launch(Intent(this, AppSelectorActivity::class.java))
         }
@@ -144,15 +135,12 @@ class MainActivity : AppCompatActivity() {
     // ── Permission Checks ──────────────────────────────────────────────────────
 
     /**
-     * Xiaomi/MIUI bug: Settings.canDrawOverlays() returns false even after
-     * the user grants the permission. Workaround: attempt to actually add a
-     * 0-sized overlay window — if it succeeds the permission is truly granted.
+     * بررسی مجوز نمایش روی برنامه‌ها.
+     * Workaround برای باگ MIUI که canDrawOverlays() همیشه false برمی‌گرداند.
      */
     private fun hasOverlayPermission(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         if (Settings.canDrawOverlays(this)) return true
-
-        // MIUI workaround — try creating a real overlay
         return try {
             val wm = getSystemService(WINDOW_SERVICE) as WindowManager
             val v  = View(this)
@@ -170,228 +158,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasAccessibilityPermission(): Boolean {
-        return try {
-            // روش اول: AccessibilityManager (استاندارد)
-            val am = getSystemService(ACCESSIBILITY_SERVICE) as? AccessibilityManager
-            if (am != null) {
-                val enabledViaManager = am
-                    .getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
-                    .any { it.resolveInfo.serviceInfo.packageName == packageName }
-                if (enabledViaManager) return true
-            }
-            // روش دوم: خواندن مستقیم از Settings.Secure
-            // (روی MIUI بعد از ADB، AccessibilityManager ممکن است فوری آپدیت نشود)
-            val enabledServices = Settings.Secure.getString(
-                contentResolver,
-                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-            ) ?: return false
-            val component = "$packageName/com.linkextractor.app.LinkAccessibilityService"
-            enabledServices.split(":").any { it.trim().equals(component, ignoreCase = true) }
-        } catch (_: Exception) {
-            false
-        }
+    /**
+     * بررسی اینکه مجوز ضبط صفحه داده شده است.
+     * توکن در FloatingWindowService.companion ذخیره می‌شود.
+     */
+    private fun hasScreenCapturePermission(): Boolean {
+        return FloatingWindowService.projectionResultCode != 0 &&
+               FloatingWindowService.projectionData != null
     }
 
-    // ── Permission Request Helpers ─────────────────────────────────────────────
+    // ── Permission Requests ────────────────────────────────────────────────────
 
     private fun requestOverlayPermission() {
-        if (hasOverlayPermission()) {
-            Snackbar.make(binding.root, "مجوز از قبل فعال است ✓", Snackbar.LENGTH_SHORT).show()
-            return
-        }
-
-        val isMiuiDevice  = isMiui()
-        val isAndroid13Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-
-        if (isMiuiDevice && isAndroid13Plus) {
-            // MIUI + Android 13+: حتی مرکز امنیت MIUI هم "تنظیم محدودشده" نشان می‌دهد.
-            // تنها راه بدون روت، دستور ADB از طریق LADB یا کامپیوتر است.
-            showMiuiOverlayAdbDialog()
-        } else if (isMiuiDevice) {
-            // MIUI قدیمی‌تر: مرکز امنیت MIUI کار می‌کند
-            MaterialAlertDialogBuilder(this)
-                .setTitle("مجوز نمایش شناور — Xiaomi")
-                .setMessage(
-                    "روی Xiaomi باید از مرکز امنیت MIUI این مجوز را بدهید:\n\n" +
-                    "۱. دکمه «باز کردن مرکز امنیت» را بزنید\n" +
-                    "۲. در لیست، روی «استخراج لینک» ضربه بزنید\n" +
-                    "۳. گزینه «سایر مجوزها» را باز کنید\n" +
-                    "۴. «نمایش پنجره‌های شناور» را روشن کنید\n" +
-                    "۵. «باز کردن پنجره‌ها در پس‌زمینه» را هم روشن کنید\n\n" +
-                    "اگر مرکز امنیت باز نشد، دکمه «تنظیمات استاندارد» را بزنید."
-                )
-                .setPositiveButton("باز کردن مرکز امنیت") { _, _ -> launchMiuiPermissionEditor() }
-                .setNeutralButton("تنظیمات استاندارد") { _, _ -> launchOverlaySettings() }
-                .setNegativeButton("لغو", null)
-                .show()
-        } else {
-            launchOverlaySettings()
-        }
-    }
-
-    /**
-     * MIUI + Android 13+: مرکز امنیت MIUI نیز "تنظیم محدودشده" نشان می‌دهد.
-     * راه‌حل: باز کردن صفحه راهنمای LADB.
-     */
-    private fun showMiuiOverlayAdbDialog() {
         overlayLauncher.launch(
-            Intent(this, LadbSetupActivity::class.java).apply {
-                putExtra(LadbSetupActivity.EXTRA_MODE, LadbSetupActivity.MODE_OVERLAY)
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+                data = android.net.Uri.parse("package:$packageName")
             }
         )
-    }
-
-    /** Opens MIUI Security Center directly on the app's permission page. */
-    private fun launchMiuiPermissionEditor() {
-        val launched = runCatching {
-            overlayLauncher.launch(
-                Intent("miui.intent.action.APP_PERM_EDITOR").apply {
-                    setClassName(
-                        "com.miui.securitycenter",
-                        "com.miui.permcenter.permissions.PermissionsEditorActivity"
-                    )
-                    putExtra("extra_pkgname", packageName)
-                }
-            )
-        }.isSuccess
-        if (!launched) launchOverlaySettings()
-    }
-
-    private fun launchOverlaySettings() {
-        runCatching {
-            overlayLauncher.launch(
-                Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-            )
-        }.onFailure {
-            Toast.makeText(this, "صفحه تنظیمات باز نشد", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun openAccessibilitySettings() {
-        // اول Shizuku را بررسی کن — بدون نیاز به هیچ دستور دستی
-        if (ShizukuHelper.isInstalled(this) && ShizukuHelper.isRunning()) {
-            if (ShizukuHelper.hasPermission()) {
-                activateAccessibilityViaShizuku()
-            } else {
-                MaterialAlertDialogBuilder(this)
-                    .setTitle("✨ Shizuku شناسایی شد")
-                    .setMessage(
-                        "Shizuku نصب و در حال اجرا است.\n\n" +
-                        "با تأیید مجوز، برنامه به صورت خودکار " +
-                        "دسترس‌پذیری را فعال می‌کند — بدون ترمینال."
-                    )
-                    .setPositiveButton("تأیید مجوز") { _, _ -> ShizukuHelper.requestPermission() }
-                    .setNegativeButton("روش دیگر") { _, _ -> openAccessibilityFallback() }
-                    .show()
-            }
-            return
-        }
-        openAccessibilityFallback()
-    }
-
-    private fun activateAccessibilityViaShizuku() {
-        Toast.makeText(this, "در حال اتصال به Shizuku…", Toast.LENGTH_SHORT).show()
-        ShizukuHelper.bindAndRun { connected ->
-            runOnUiThread {
-                if (!connected) {
-                    Toast.makeText(this, "اتصال به Shizuku ناموفق — روش دستی را امتحان کنید", Toast.LENGTH_LONG).show()
-                    openAccessibilityFallback()
-                    return@runOnUiThread
-                }
-                val ok = ShizukuHelper.enableAccessibilityService(packageName)
-                if (ok) {
-                    Toast.makeText(this, "✅ دسترس‌پذیری فعال شد!", Toast.LENGTH_LONG).show()
-                    updateAllUI()
-                } else {
-                    Toast.makeText(this, "خطا در اجرا — روش دستی را امتحان کنید", Toast.LENGTH_LONG).show()
-                    openAccessibilityFallback()
-                }
-                ShizukuHelper.unbindService()
-            }
-        }
-    }
-
-    private fun openAccessibilityFallback() {
-        val isMiuiDevice = isMiui()
-        val isAndroid13Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
-
-        if (isMiuiDevice && isAndroid13Plus) {
-            showMiuiAdbDialog()
-        } else if (isAndroid13Plus) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("فعال‌سازی سرویس دسترس‌پذیری")
-                .setMessage(
-                    "⚠ مرحله اول — اجازه تنظیمات محدود (Android 13+)\n\n" +
-                    "۱. دکمه «اطلاعات برنامه» را بزنید\n" +
-                    "۲. روی آیکون ⋮ (سه‌نقطه بالا-راست) ضربه بزنید\n" +
-                    "۳. «Allow restricted settings» را انتخاب کنید\n" +
-                    "۴. برگردید و دکمه «باز کردن دسترس‌پذیری» را بزنید"
-                )
-                .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
-                .setNeutralButton("اطلاعات برنامه") { _, _ -> launchAppInfo() }
-                .setNegativeButton("لغو", null)
-                .show()
-        } else if (isMiuiDevice) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle("راهنمای Xiaomi / MIUI")
-                .setMessage(
-                    "۱. وارد «تنظیمات دسترس‌پذیری» می‌شوید\n" +
-                    "۲. روی «برنامه‌های بارگیری‌شده» ضربه بزنید\n" +
-                    "۳. «سرویس استخراج لینک» را پیدا و فعال کنید"
-                )
-                .setPositiveButton("باز کردن دسترس‌پذیری") { _, _ -> launchAccessibilitySettings() }
-                .setNegativeButton("لغو", null)
-                .show()
-        } else {
-            launchAccessibilitySettings()
-        }
     }
 
     /**
-     * MIUI + Android 13+: باز کردن صفحه راهنمای گام‌به‌گام LADB برای دسترس‌پذیری.
+     * باز کردن دیالوگ سیستمی ضبط صفحه.
+     * یک پنجره ساده «آیا اجازه می‌دهید این برنامه صفحه را ضبط کند؟» نشان می‌دهد.
      */
-    private fun showMiuiAdbDialog() {
-        accessibilityLauncher.launch(
-            Intent(this, LadbSetupActivity::class.java).apply {
-                putExtra(LadbSetupActivity.EXTRA_MODE, LadbSetupActivity.MODE_ACCESSIBILITY)
-            }
-        )
-    }
-
-    private fun launchAppInfo() {
-        runCatching {
-            accessibilityLauncher.launch(
-                Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:$packageName")
-                )
-            )
-        }.onFailure {
-            Toast.makeText(this, "صفحه اطلاعات برنامه باز نشد", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun launchAccessibilitySettings() {
-        runCatching {
-            accessibilityLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }.onFailure {
-            Toast.makeText(this, "صفحه تنظیمات باز نشد", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // ── MIUI Detection ─────────────────────────────────────────────────────────
-
-    private fun isMiui(): Boolean = try {
-        val prop = Class.forName("android.os.SystemProperties")
-            .getMethod("get", String::class.java, String::class.java)
-        val version = prop.invoke(null, "ro.miui.ui.version.name", "") as String
-        version.isNotEmpty()
-    } catch (_: Exception) {
-        false
+    private fun requestScreenCapturePermission() {
+        val mpm = getSystemService(MediaProjectionManager::class.java)
+        screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
     }
 
     // ── UI Updates ─────────────────────────────────────────────────────────────
@@ -405,10 +197,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updatePermissionUI() {
-        val overlayOk = hasOverlayPermission()
-        val accessOk  = hasAccessibilityPermission()
+        val overlayOk       = hasOverlayPermission()
+        val screenCaptureOk = hasScreenCapturePermission()
 
         with(binding) {
+            // Overlay row
             if (overlayOk) {
                 tvOverlayStatus.text = getString(R.string.permission_overlay_ok)
                 tvOverlayStatus.setTextColor(getColor(R.color.green))
@@ -421,20 +214,22 @@ class MainActivity : AppCompatActivity() {
                 btnOverlay.alpha     = 1f
             }
 
-            if (accessOk) {
-                tvAccessibilityStatus.text = getString(R.string.permission_accessibility_ok)
-                tvAccessibilityStatus.setTextColor(getColor(R.color.green))
-                btnAccessibility.isEnabled = false
-                btnAccessibility.alpha     = 0.5f
+            // Screen capture row
+            if (screenCaptureOk) {
+                tvScreenCaptureStatus.text = getString(R.string.permission_screen_capture_ok)
+                tvScreenCaptureStatus.setTextColor(getColor(R.color.green))
+                btnScreenCapture.isEnabled = false
+                btnScreenCapture.alpha     = 0.5f
             } else {
-                tvAccessibilityStatus.text = getString(R.string.permission_accessibility_no)
-                tvAccessibilityStatus.setTextColor(getColor(R.color.red))
-                btnAccessibility.isEnabled = true
-                btnAccessibility.alpha     = 1f
+                tvScreenCaptureStatus.text = getString(R.string.permission_screen_capture_no)
+                tvScreenCaptureStatus.setTextColor(getColor(R.color.red))
+                btnScreenCapture.isEnabled = true
+                btnScreenCapture.alpha     = 1f
             }
 
-            btnStartService.isEnabled = overlayOk && accessOk
-            btnStartService.alpha     = if (overlayOk && accessOk) 1f else 0.5f
+            // سرویس فقط نیاز به Overlay + ScreenCapture دارد
+            btnStartService.isEnabled = overlayOk && screenCaptureOk
+            btnStartService.alpha     = if (overlayOk && screenCaptureOk) 1f else 0.5f
         }
     }
 
@@ -481,16 +276,16 @@ class MainActivity : AppCompatActivity() {
                 .make(binding.root, "ابتدا مجوز نمایش روی برنامه‌ها را فعال کنید", Snackbar.LENGTH_LONG)
                 .setAction("فعال‌سازی") { requestOverlayPermission() }
                 .show()
-            !hasAccessibilityPermission() -> Snackbar
-                .make(binding.root, "ابتدا سرویس دسترس‌پذیری را فعال کنید", Snackbar.LENGTH_LONG)
-                .setAction("فعال‌سازی") { openAccessibilitySettings() }
+            !hasScreenCapturePermission() -> Snackbar
+                .make(binding.root, "ابتدا مجوز ضبط صفحه را فعال کنید", Snackbar.LENGTH_LONG)
+                .setAction("فعال‌سازی") { requestScreenCapturePermission() }
                 .show()
             else -> {
                 FloatingWindowService.start(this)
                 updateServiceStatus(active = true)
                 Snackbar.make(
                     binding.root,
-                    "✓ سرویس شروع شد — برنامه را ببندید و وارد برنامه هدف شوید",
+                    "✓ سرویس شروع شد — برنامه را ببندید و وارد شاد شوید",
                     Snackbar.LENGTH_LONG
                 ).show()
             }

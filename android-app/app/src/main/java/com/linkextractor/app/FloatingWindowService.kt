@@ -5,13 +5,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.graphics.PixelFormat
+import android.media.projection.MediaProjection
+import android.media.projection.MediaProjectionManager
 import android.os.IBinder
 import android.util.DisplayMetrics
 import android.view.Gravity
@@ -23,12 +23,23 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class FloatingWindowService : Service() {
 
     companion object {
         const val CHANNEL_ID = "link_extractor_channel"
         const val NOTIF_ID   = 1001
+
+        /**
+         * توکن MediaProjection — قبل از start کردن سرویس از MainActivity ست می‌شود.
+         */
+        var projectionResultCode: Int   = 0
+        var projectionData: Intent?     = null
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, FloatingWindowService::class.java))
@@ -42,9 +53,12 @@ class FloatingWindowService : Service() {
     private lateinit var params: WindowManager.LayoutParams
     private var floatingView: View? = null
     private var btnExtract: ExtendedFloatingActionButton? = null
-    private var autoCapturedCount = 0
     private var screenW = 0
     private var screenH = 0
+
+    private var mediaProjection: MediaProjection? = null
+    private val job = Job()
+    private val serviceScope = CoroutineScope(Dispatchers.Main + job)
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -56,7 +70,7 @@ class FloatingWindowService : Service() {
         startForeground(NOTIF_ID, buildNotification())
         PrefsManager.setServiceActive(this, true)
         resolveScreenSize()
-        registerLinkReceiver()
+        initMediaProjection()
         showFloatingButton()
     }
 
@@ -64,7 +78,22 @@ class FloatingWindowService : Service() {
         super.onDestroy()
         PrefsManager.setServiceActive(this, false)
         removeFloatingButton()
-        try { unregisterReceiver(linkReceiver) } catch (_: Exception) {}
+        mediaProjection?.stop()
+        mediaProjection = null
+        job.cancel()
+    }
+
+    // ── MediaProjection ────────────────────────────────────────────────────────
+
+    private fun initMediaProjection() {
+        val data = projectionData ?: return
+        if (projectionResultCode == 0) return
+        try {
+            val mpm = getSystemService(MediaProjectionManager::class.java)
+            mediaProjection = mpm.getMediaProjection(projectionResultCode, data)
+        } catch (e: Exception) {
+            Toast.makeText(this, "خطا در راه‌اندازی ضبط صفحه: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ── Screen size ────────────────────────────────────────────────────────────
@@ -111,132 +140,120 @@ class FloatingWindowService : Service() {
             .setOnClickListener { performExtraction() }
 
         view.findViewById<FloatingActionButton>(R.id.btnClose)
-            .setOnClickListener { stopSelf() }
+            .setOnClickListener {
+                FloatingWindowService.stop(this)
+            }
 
-        try {
-            windowManager.addView(view, params)
-        } catch (e: Exception) {
-            // Overlay permission was revoked while we were starting
-            Toast.makeText(this, "مجوز نمایش روی برنامه‌ها لازم است", Toast.LENGTH_LONG).show()
-            stopSelf()
-        }
+        windowManager.addView(view, params)
     }
 
+    private fun removeFloatingButton() {
+        floatingView?.let {
+            runCatching { windowManager.removeView(it) }
+        }
+        floatingView = null
+    }
+
+    // ── Drag ──────────────────────────────────────────────────────────────────
+
     private fun setupDrag(view: View) {
-        var initX = 0; var initY = 0
-        var initTX = 0f; var initTY = 0f
-        var dragged = false
+        var startX = 0f
+        var startY = 0f
+        var startParamX = 0
+        var startParamY = 0
 
         view.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    initX = params.x; initY = params.y
-                    initTX = event.rawX; initTY = event.rawY
-                    dragged = false
-                    true
+                    startX = event.rawX
+                    startY = event.rawY
+                    startParamX = params.x
+                    startParamY = params.y
+                    false
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    val dx = (initTX - event.rawX).toInt()
-                    val dy = (event.rawY - initTY).toInt()
-                    if (dx * dx + dy * dy > 25) dragged = true
-
-                    // Clamp inside screen boundaries so button never goes off-screen
-                    params.x = (initX + dx).coerceIn(0, screenW / 2)
-                    params.y = (initY + dy).coerceIn(0, screenH - 300)
-
-                    try { windowManager.updateViewLayout(floatingView, params) }
-                    catch (_: Exception) {}
+                    params.x = (startParamX - (event.rawX - startX)).toInt()
+                        .coerceIn(0, screenW)
+                    params.y = (startParamY + (event.rawY - startY)).toInt()
+                        .coerceIn(0, screenH)
+                    windowManager.updateViewLayout(view, params)
                     true
-                }
-                MotionEvent.ACTION_UP -> {
-                    // Snap to nearest edge for clean look
-                    if (dragged) snapToEdge()
-                    false    // let onClick fire if not dragged
                 }
                 else -> false
             }
         }
     }
 
-    /** Animate the button to the nearest left/right edge after drag ends. */
-    private fun snapToEdge() {
-        params.x = if (params.x < screenW / 4) 24 else 24
-        try { windowManager.updateViewLayout(floatingView, params) }
-        catch (_: Exception) {}
-    }
+    // ── Extraction (main logic) ────────────────────────────────────────────────
 
-    private fun removeFloatingButton() {
-        val v = floatingView ?: return
-        try { windowManager.removeView(v) } catch (_: Exception) {}
-        floatingView = null
-        btnExtract   = null
-    }
-
-    // ── Auto-capture badge ─────────────────────────────────────────────────────
-
-    private fun onAutoCapture(links: List<String>) {
-        autoCapturedCount += links.size
-        val btn = btnExtract ?: return
-        btn.text = if (autoCapturedCount > 0) "🔗 استخراج ($autoCapturedCount)" else "🔗 استخراج"
-    }
-
-    // ── Manual Extraction ──────────────────────────────────────────────────────
-
+    /**
+     * کاربر دکمه استخراج را زد:
+     *  1. از AccessibilityService استفاده می‌کند اگر فعال باشد (fallback سریع)
+     *  2. در غیر این‌صورت از ضبط صفحه + OCR استفاده می‌کند
+     */
     private fun performExtraction() {
-        val service = LinkAccessibilityService.instance
-        if (service == null) {
+        // روش اول: AccessibilityService (اگر موجود باشد — fallback)
+        val accessService = LinkAccessibilityService.instance
+        if (accessService != null) {
+            val links = runCatching { accessService.extractCurrentLinks() }.getOrDefault(emptyList())
+            if (links.isNotEmpty()) {
+                handleLinks(links)
+                return
+            }
+        }
+
+        // روش اصلی: ضبط صفحه + OCR
+        val projection = mediaProjection
+        if (projection == null) {
             Toast.makeText(
                 this,
-                "⚠ سرویس دسترس‌پذیری فعال نیست.\nبرنامه را باز کنید و آن را فعال کنید.",
+                "مجوز ضبط صفحه داده نشده.\nبرنامه را باز کنید و «فعال‌سازی ضبط صفحه» را بزنید.",
                 Toast.LENGTH_LONG
             ).show()
             return
         }
 
-        val links = try {
-            service.extractCurrentLinks()
-        } catch (e: Exception) {
-            Toast.makeText(this, "خطا در استخراج: ${e.message}", Toast.LENGTH_SHORT).show()
-            return
-        }
+        btnExtract?.text = "⏳"
+        serviceScope.launch {
+            val links = try {
+                ScreenLinkExtractor(this@FloatingWindowService, projection).extractLinks()
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@FloatingWindowService, "خطا: ${e.message}", Toast.LENGTH_SHORT).show()
+                    btnExtract?.text = "🔗 استخراج"
+                }
+                return@launch
+            }
 
-        if (links.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_link_found), Toast.LENGTH_SHORT).show()
-            return
+            withContext(Dispatchers.Main) {
+                btnExtract?.text = "🔗 استخراج"
+                if (links.isEmpty()) {
+                    Toast.makeText(this@FloatingWindowService, getString(R.string.no_link_found), Toast.LENGTH_SHORT).show()
+                    return@withContext
+                }
+                handleLinks(links)
+            }
         }
+    }
 
+    private fun handleLinks(links: List<String>) {
         links.forEach { PrefsManager.addLink(this, it) }
 
         val clipboard = getSystemService(CLIPBOARD_SERVICE) as? ClipboardManager
         clipboard?.setPrimaryClip(ClipData.newPlainText("link", links[0]))
 
-        autoCapturedCount = 0
-        btnExtract?.text  = "🔗 استخراج"
+        // اطلاع‌رسانی به MainActivity برای به‌روزرسانی لیست
+        val intent = Intent(LinkAccessibilityService.ACTION_LINK_DETECTED).apply {
+            setPackage(packageName)
+            putStringArrayListExtra(LinkAccessibilityService.EXTRA_LINKS, ArrayList(links))
+        }
+        sendBroadcast(intent)
 
         val msg = if (links.size == 1)
             "✓ لینک کپی شد:\n${links[0].take(65)}"
         else
             "✓ ${links.size} لینک پیدا شد — اولین لینک کپی شد"
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
-    }
-
-    // ── Broadcast ──────────────────────────────────────────────────────────────
-
-    private val linkReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            val links = intent
-                ?.getStringArrayListExtra(LinkAccessibilityService.EXTRA_LINKS)
-                ?: return
-            if (links.isNotEmpty()) onAutoCapture(links)
-        }
-    }
-
-    private fun registerLinkReceiver() {
-        registerReceiver(
-            linkReceiver,
-            IntentFilter(LinkAccessibilityService.ACTION_LINK_DETECTED),
-            RECEIVER_NOT_EXPORTED
-        )
     }
 
     // ── Notification ───────────────────────────────────────────────────────────

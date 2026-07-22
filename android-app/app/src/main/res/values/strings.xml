@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">استخراج لینک</string>
     <string name="select_apps">انتخاب برنامه‌ها</string>
-    <string name="accessibility_service_label">سرویس استخراج لینک</string>
-    <string name="accessibility_service_description">این سرویس لینک‌های پنهان را از برنامه‌های انتخاب‌شده شناسایی و استخراج می‌کند.</string>
+    <string name="accessibility_service_label">سرویس استخراج لینک (اختیاری)</string>
+    <string name="accessibility_service_description">سرویس اختیاری برای استخراج لینک. روش اصلی ضبط صفحه است.</string>
 
     <!-- Status -->
     <string name="status_active">● سرویس فعال است</string>
@@ -12,8 +12,8 @@
     <!-- Permissions -->
     <string name="permission_overlay_ok">✓ نمایش روی برنامه‌ها: فعال</string>
     <string name="permission_overlay_no">✗ نمایش روی برنامه‌ها: غیرفعال</string>
-    <string name="permission_accessibility_ok">✓ سرویس دسترس‌پذیری: فعال</string>
-    <string name="permission_accessibility_no">✗ سرویس دسترس‌پذیری: غیرفعال</string>
+    <string name="permission_screen_capture_ok">✓ ضبط صفحه: فعال</string>
+    <string name="permission_screen_capture_no">✗ ضبط صفحه: غیرفعال</string>
 
     <!-- Main screen -->
     <string name="btn_select_apps">انتخاب برنامه‌های هدف</string>
