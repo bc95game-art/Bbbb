@@ -1,15 +1,44 @@
 package com.linkextractor.app
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import rikka.shizuku.Shizuku
 
 /**
  * کمک‌کننده Shizuku — دسترسی shell ممتاز بدون روت.
+ * از UserService استفاده می‌کند (روش صحیح در Shizuku v13+).
  */
 object ShizukuHelper {
 
     const val REQUEST_CODE = 1001
+
+    private var iService: IShizukuService? = null
+    private var pendingCallback: ((Boolean) -> Unit)? = null
+
+    private val serviceArgs by lazy {
+        Shizuku.UserServiceArgs(
+            ComponentName(
+                "com.linkextractor.app",
+                ShizukuService::class.java.name
+            )
+        )
+            .daemon(false)
+            .processNameSuffix("shizuku_svc")
+            .debuggable(false)
+            .version(1)
+    }
+
+    private val connection = object : android.content.ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: android.os.IBinder?) {
+            iService = IShizukuService.Stub.asInterface(binder)
+            pendingCallback?.invoke(true)
+            pendingCallback = null
+        }
+        override fun onServiceDisconnected(name: ComponentName?) {
+            iService = null
+        }
+    }
 
     /** آیا Shizuku نصب است؟ */
     fun isInstalled(context: Context): Boolean = runCatching {
@@ -33,24 +62,35 @@ object ShizukuHelper {
     }
 
     /**
-     * دستور shell را با دسترسی ممتاز اجرا می‌کند.
+     * UserService را راه‌اندازی کرده و وقتی آماده شد callback را صدا می‌زند.
      */
-    fun runCommand(command: String): Boolean = runCatching {
-        val process = Shizuku.newProcess(
-            arrayOf("sh", "-c", command), null, null
-        )
-        val exit = process.waitFor()
-        process.destroy()
-        exit == 0
-    }.getOrDefault(false)
+    fun bindAndRun(callback: (Boolean) -> Unit) {
+        if (iService != null) {
+            callback(true)
+            return
+        }
+        pendingCallback = callback
+        runCatching {
+            Shizuku.bindUserService(serviceArgs, connection)
+        }.onFailure {
+            pendingCallback = null
+            callback(false)
+        }
+    }
+
+    fun unbindService() {
+        runCatching { Shizuku.unbindUserService(serviceArgs, connection, true) }
+        iService = null
+    }
 
     /**
      * دسترس‌پذیری برنامه را از طریق Shizuku فعال می‌کند.
+     * @return true اگر موفق
      */
-    fun enableAccessibilityService(packageName: String): Boolean {
+    fun enableAccessibilityService(packageName: String): Boolean = runCatching {
         val component = "$packageName/com.linkextractor.app.LinkAccessibilityService"
-        return runCommand(
+        iService?.runCommand(
             "settings put secure enabled_accessibility_services $component"
-        )
-    }
+        ) == 0
+    }.getOrDefault(false)
 }

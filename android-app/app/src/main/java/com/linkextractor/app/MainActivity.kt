@@ -83,6 +83,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
+        ShizukuHelper.unbindService()
     }
 
     override fun onResume() {
@@ -293,13 +294,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun activateAccessibilityViaShizuku() {
-        val ok = ShizukuHelper.enableAccessibilityService(packageName)
-        if (ok) {
-            Toast.makeText(this, "✅ دسترس‌پذیری فعال شد!", Toast.LENGTH_LONG).show()
-            updateAllUI()
-        } else {
-            Toast.makeText(this, "خطا در اجرا — روش دستی را امتحان کنید", Toast.LENGTH_LONG).show()
-            openAccessibilityFallback()
+        Toast.makeText(this, "در حال اتصال به Shizuku…", Toast.LENGTH_SHORT).show()
+        ShizukuHelper.bindAndRun { connected ->
+            runOnUiThread {
+                if (!connected) {
+                    Toast.makeText(this, "اتصال به Shizuku ناموفق — روش دستی را امتحان کنید", Toast.LENGTH_LONG).show()
+                    openAccessibilityFallback()
+                    return@runOnUiThread
+                }
+                val ok = ShizukuHelper.enableAccessibilityService(packageName)
+                if (ok) {
+                    Toast.makeText(this, "✅ دسترس‌پذیری فعال شد!", Toast.LENGTH_LONG).show()
+                    updateAllUI()
+                } else {
+                    Toast.makeText(this, "خطا در اجرا — روش دستی را امتحان کنید", Toast.LENGTH_LONG).show()
+                    openAccessibilityFallback()
+                }
+                ShizukuHelper.unbindService()
+            }
         }
     }
 
