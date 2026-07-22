@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import com.linkextractor.app.databinding.ActivityMainBinding
+import rikka.shizuku.Shizuku
 
 class MainActivity : AppCompatActivity() {
 
@@ -62,12 +63,26 @@ class MainActivity : AppCompatActivity() {
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
+    private val shizukuPermissionListener = Shizuku.OnRequestPermissionResultListener { _, result ->
+        if (result == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            activateAccessibilityViaShizuku()
+        } else {
+            Toast.makeText(this, "مجوز Shizuku رد شد", Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
         setupRecyclerView()
         setupClickListeners()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        Shizuku.removeRequestPermissionResultListener(shizukuPermissionListener)
     }
 
     override fun onResume() {
@@ -256,15 +271,45 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openAccessibilitySettings() {
+        // اول Shizuku را بررسی کن — بدون نیاز به هیچ دستور دستی
+        if (ShizukuHelper.isInstalled(this) && ShizukuHelper.isRunning()) {
+            if (ShizukuHelper.hasPermission()) {
+                activateAccessibilityViaShizuku()
+            } else {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle("✨ Shizuku شناسایی شد")
+                    .setMessage(
+                        "Shizuku نصب و در حال اجرا است.\n\n" +
+                        "با تأیید مجوز، برنامه به صورت خودکار " +
+                        "دسترس‌پذیری را فعال می‌کند — بدون ترمینال."
+                    )
+                    .setPositiveButton("تأیید مجوز") { _, _ -> ShizukuHelper.requestPermission() }
+                    .setNegativeButton("روش دیگر") { _, _ -> openAccessibilityFallback() }
+                    .show()
+            }
+            return
+        }
+        openAccessibilityFallback()
+    }
+
+    private fun activateAccessibilityViaShizuku() {
+        val ok = ShizukuHelper.enableAccessibilityService(packageName)
+        if (ok) {
+            Toast.makeText(this, "✅ دسترس‌پذیری فعال شد!", Toast.LENGTH_LONG).show()
+            updateAllUI()
+        } else {
+            Toast.makeText(this, "خطا در اجرا — روش دستی را امتحان کنید", Toast.LENGTH_LONG).show()
+            openAccessibilityFallback()
+        }
+    }
+
+    private fun openAccessibilityFallback() {
         val isMiuiDevice = isMiui()
         val isAndroid13Plus = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
         if (isMiuiDevice && isAndroid13Plus) {
-            // MIUI + Android 13+: "Allow restricted settings" toggle is GREYED OUT by Xiaomi.
-            // The only reliable solution without root is ADB.
             showMiuiAdbDialog()
         } else if (isAndroid13Plus) {
-            // Stock Android 13+: toggle exists in App Info → ⋮ menu
             MaterialAlertDialogBuilder(this)
                 .setTitle("فعال‌سازی سرویس دسترس‌پذیری")
                 .setMessage(
