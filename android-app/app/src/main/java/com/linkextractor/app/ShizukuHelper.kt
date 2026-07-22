@@ -85,12 +85,44 @@ object ShizukuHelper {
 
     /**
      * دسترس‌پذیری برنامه را از طریق Shizuku فعال می‌کند.
-     * @return true اگر موفق
+     *
+     * اصلاحات نسبت به نسخه قبل:
+     *  1. لیست سرویس‌های فعلی را می‌خواند و سرویس جدید را APPEND می‌کند
+     *     (به جای جایگزین کردن همه سرویس‌ها که باعث مسدود شدن می‌شد)
+     *  2. accessibility_enabled را روی ۱ تنظیم می‌کند
+     *
+     * @return true اگر هر دو مرحله موفق باشند
      */
     fun enableAccessibilityService(packageName: String): Boolean = runCatching {
+        val svc = iService ?: return@runCatching false
         val component = "$packageName/com.linkextractor.app.LinkAccessibilityService"
-        iService?.runCommand(
-            "settings put secure enabled_accessibility_services $component"
+
+        // ① لیست فعلی را بخوان
+        val current = svc.runCommandWithOutput(
+            "settings get secure enabled_accessibility_services"
+        ).trim()
+
+        // ② اگر سرویس قبلاً وجود دارد نیازی به تغییر نیست
+        if (component in current) {
+            // فقط accessibility_enabled را مطمئن شو
+            svc.runCommand("settings put secure accessibility_enabled 1")
+            return@runCatching true
+        }
+
+        // ③ لیست جدید را بساز — append کن نه replace
+        val newList = when {
+            current.isBlank() || current == "null" -> component
+            else -> "$current:$component"
+        }
+
+        // ④ هر دو دستور را اجرا کن
+        val r1 = svc.runCommand(
+            "settings put secure enabled_accessibility_services $newList"
         ) == 0
+        val r2 = svc.runCommand(
+            "settings put secure accessibility_enabled 1"
+        ) == 0
+
+        r1 && r2
     }.getOrDefault(false)
 }

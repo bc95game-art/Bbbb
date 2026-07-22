@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Accessibility service config.
-    - No android:packageNames → monitors ALL packages (needed for cross-app link capture)
-    - flagReportViewIds required to read view IDs for URL-bar detection
-    - flagIncludeNotImportantViews to catch hidden/internal nodes
-    - flagRetrieveInteractiveWindows to access all windows at once
-    - No android:settingsActivity to avoid MIUI compatibility issues
+    Accessibility service config — targeted at ir.medu.shad only.
+
+    Targeting a specific package instead of all apps:
+      • Reduces OS/security-layer suspicion on MIUI / locked-down ROMs
+      • Lowers the permission-grant barrier on some devices
+      • Still captures all relevant link events inside the Shad app
+
+    If you ever need to monitor additional packages, add them comma-separated
+    in android:packageNames and mirror the change in onServiceConnected().
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:packageNames="ir.medu.shad"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled|typeViewTextChanged|typeViewClicked"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
