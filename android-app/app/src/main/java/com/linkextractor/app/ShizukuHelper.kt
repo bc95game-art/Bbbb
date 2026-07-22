@@ -84,6 +84,18 @@ object ShizukuHelper {
     }
 
     /**
+     * یک دستور shell را از طریق Shizuku اجرا کرده و خروجی را برمی‌گرداند.
+     * اگر Shizuku bind نشده باشد رشته خالی برمی‌گرداند.
+     * قبل از فراخوانی این متد باید bindAndRun() فراخوانی شده باشد.
+     */
+    fun runShellCommand(cmd: String): String {
+        return runCatching { iService?.runCommandWithOutput(cmd) ?: "" }.getOrDefault("")
+    }
+
+    /** بررسی اینکه UserService در حال حاضر bind شده است */
+    fun isServiceBound(): Boolean = iService != null
+
+    /**
      * دسترس‌پذیری برنامه را از طریق Shizuku فعال می‌کند.
      *
      * اصلاحات نسبت به نسخه قبل:

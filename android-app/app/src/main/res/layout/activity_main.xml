@@ -119,7 +119,7 @@
                     android:background="#F0F0F0"
                     android:layout_marginBottom="10dp" />
 
-                <!-- Screen Capture Row (جایگزین Accessibility Service) -->
+                <!-- Shizuku Row -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -127,16 +127,16 @@
                     android:gravity="center_vertical">
 
                     <TextView
-                        android:id="@+id/tvScreenCaptureStatus"
+                        android:id="@+id/tvShizukuStatus"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/permission_screen_capture_no"
+                        android:text="@string/permission_shizuku_no"
                         android:textSize="13sp"
                         android:textColor="@color/red" />
 
                     <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnScreenCapture"
+                        android:id="@+id/btnShizuku"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"

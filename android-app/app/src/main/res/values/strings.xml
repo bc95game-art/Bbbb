@@ -12,8 +12,8 @@
     <!-- Permissions -->
     <string name="permission_overlay_ok">✓ نمایش روی برنامه‌ها: فعال</string>
     <string name="permission_overlay_no">✗ نمایش روی برنامه‌ها: غیرفعال</string>
-    <string name="permission_screen_capture_ok">✓ ضبط صفحه: فعال</string>
-    <string name="permission_screen_capture_no">✗ ضبط صفحه: غیرفعال</string>
+    <string name="permission_shizuku_ok">✓ Shizuku: فعال و آماده</string>
+    <string name="permission_shizuku_no">✗ Shizuku: غیرفعال یا بدون مجوز</string>
 
     <!-- Main screen -->
     <string name="btn_select_apps">انتخاب برنامه‌های هدف</string>

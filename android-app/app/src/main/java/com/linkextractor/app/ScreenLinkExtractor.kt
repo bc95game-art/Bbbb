@@ -2,40 +2,38 @@ package com.linkextractor.app
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.PixelFormat
-import android.hardware.display.DisplayManager
-import android.media.ImageReader
-import android.media.projection.MediaProjection
-import android.util.DisplayMetrics
-import android.view.WindowManager
+import android.graphics.BitmapFactory
+import android.util.Base64
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.io.File
 import kotlin.coroutines.resume
 
 /**
- * جایگزین AccessibilityService — از MediaProjection برای ضبط صفحه
- * و ML Kit برای خواندن متن استفاده می‌کند.
+ * استخراج لینک از صفحه نمایش با استفاده از Shizuku + ML Kit OCR.
  *
- * مزایا نسبت به Accessibility:
- *  - نیازی به مجوز دسترس‌پذیری ندارد
- *  - یک بار مجوز MediaProjection (یک تپ ساده) — همیشه کار می‌کند
- *  - روی همه دستگاه‌ها حتی MIUI کار می‌کند
+ * روش کار:
+ *  1. Shizuku دستور screencap را اجرا کرده و تصویر را ذخیره می‌کند
+ *  2. ML Kit متن را از تصویر می‌خواند
+ *  3. لینک‌ها با Regex پیدا می‌شوند
+ *
+ * مزایا نسبت به MediaProjection:
+ *  - هیچ crash روی Android 14+ نمی‌دهد (مشکل android.project_media وجود ندارد)
+ *  - نیاز به هیچ دیالوگ مجوز اضافه‌ای نیست
+ *  - روی MIUI/Xiaomi و سایر دستگاه‌ها بدون محدودیت کار می‌کند
  */
-class ScreenLinkExtractor(
-    private val context: Context,
-    private val mediaProjection: MediaProjection
-) {
+class ScreenLinkExtractor(private val context: Context) {
 
     companion object {
-        // همان Regex که در LinkAccessibilityService استفاده می‌شود
         private val URL_REGEX = Regex(
             "(https?://[^\\s\"'<>\\[\\]{}|\\\\^`]+|[a-zA-Z][a-zA-Z0-9+.\\-]{2,}://[^\\s\"'<>\\[\\]{}|\\\\^`]+)",
             RegexOption.IGNORE_CASE
         )
+        private const val CAPTURE_PATH = "/data/local/tmp/lnk_sc.png"
     }
 
     /**
@@ -52,52 +50,42 @@ class ScreenLinkExtractor(
     // ── Screen Capture ─────────────────────────────────────────────────────────
 
     private fun captureScreen(): Bitmap? {
-        val wm = context.getSystemService(WindowManager::class.java)
-        val dm = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        wm.defaultDisplay.getRealMetrics(dm)
+        // روش اول: screencap → فایل → BitmapFactory (سریع‌ترین روش)
+        ShizukuHelper.runShellCommand("screencap -p $CAPTURE_PATH")
+        Thread.sleep(400) // صبر برای تکمیل نوشتن فایل
 
-        val width  = dm.widthPixels
-        val height = dm.heightPixels
+        val file = File(CAPTURE_PATH)
+        if (file.exists()) {
+            return try {
+                val bmp = BitmapFactory.decodeFile(CAPTURE_PATH)
+                ShizukuHelper.runShellCommand("rm -f $CAPTURE_PATH")
+                bmp
+            } catch (e: Exception) {
+                ShizukuHelper.runShellCommand("rm -f $CAPTURE_PATH")
+                // اگر خواندن مستقیم ناموفق بود، به روش base64 برو
+                captureViaBase64()
+            }
+        }
 
-        val imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        // روش دوم: base64 encoding (برای دستگاه‌های با SELinux سخت‌گیر مثل MIUI)
+        return captureViaBase64()
+    }
 
-        val virtualDisplay = try {
-            mediaProjection.createVirtualDisplay(
-                "LinkCapture",
-                width, height, dm.densityDpi,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-                imageReader.surface, null, null
-            )
+    /**
+     * fallback: screencap را به base64 تبدیل کرده و در app decode می‌کند.
+     * این روش از محدودیت‌های SELinux عبور می‌کند.
+     */
+    private fun captureViaBase64(): Bitmap? {
+        val b64 = ShizukuHelper.runShellCommand(
+            "screencap -p $CAPTURE_PATH 2>/dev/null && base64 $CAPTURE_PATH; rm -f $CAPTURE_PATH"
+        ).trim()
+        if (b64.isBlank()) return null
+        return try {
+            val bytes = Base64.decode(b64, Base64.DEFAULT)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
         } catch (e: Exception) {
-            imageReader.close()
-            return null
+            null
         }
-
-        // یک فریم کامل صبر می‌کنیم
-        Thread.sleep(250)
-
-        val image = imageReader.acquireLatestImage()
-        val bitmap: Bitmap? = image?.use { img ->
-            val planes    = img.planes
-            val buffer    = planes[0].buffer
-            val rowStride = planes[0].rowStride
-            val pixStride = planes[0].pixelStride
-            val rowPad    = rowStride - pixStride * width
-
-            val bmp = Bitmap.createBitmap(
-                width + rowPad / pixStride,
-                height,
-                Bitmap.Config.ARGB_8888
-            )
-            bmp.copyPixelsFromBuffer(buffer)
-            // برش تا اندازه واقعی صفحه (بدون padding)
-            Bitmap.createBitmap(bmp, 0, 0, width, height).also { bmp.recycle() }
-        }
-
-        virtualDisplay.release()
-        imageReader.close()
-        return bitmap
     }
 
     // ── OCR (ML Kit) ───────────────────────────────────────────────────────────

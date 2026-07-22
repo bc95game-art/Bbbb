@@ -10,8 +10,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
-import android.media.projection.MediaProjection
-import android.media.projection.MediaProjectionManager
 import android.os.IBinder
 import android.util.DisplayMetrics
 import android.view.Gravity
@@ -35,12 +33,6 @@ class FloatingWindowService : Service() {
         const val CHANNEL_ID = "link_extractor_channel"
         const val NOTIF_ID   = 1001
 
-        /**
-         * توکن MediaProjection — قبل از start کردن سرویس از MainActivity ست می‌شود.
-         */
-        var projectionResultCode: Int   = 0
-        var projectionData: Intent?     = null
-
         fun start(context: Context) {
             context.startForegroundService(Intent(context, FloatingWindowService::class.java))
         }
@@ -56,7 +48,6 @@ class FloatingWindowService : Service() {
     private var screenW = 0
     private var screenH = 0
 
-    private var mediaProjection: MediaProjection? = null
     private val job = Job()
     private val serviceScope = CoroutineScope(Dispatchers.Main + job)
 
@@ -70,7 +61,8 @@ class FloatingWindowService : Service() {
         startForeground(NOTIF_ID, buildNotification())
         PrefsManager.setServiceActive(this, true)
         resolveScreenSize()
-        initMediaProjection()
+        // Shizuku UserService را از قبل bind می‌کنیم تا اولین استخراج سریع‌تر باشد
+        ShizukuHelper.bindAndRun { /* ready */ }
         showFloatingButton()
     }
 
@@ -78,22 +70,7 @@ class FloatingWindowService : Service() {
         super.onDestroy()
         PrefsManager.setServiceActive(this, false)
         removeFloatingButton()
-        mediaProjection?.stop()
-        mediaProjection = null
         job.cancel()
-    }
-
-    // ── MediaProjection ────────────────────────────────────────────────────────
-
-    private fun initMediaProjection() {
-        val data = projectionData ?: return
-        if (projectionResultCode == 0) return
-        try {
-            val mpm = getSystemService(MediaProjectionManager::class.java)
-            mediaProjection = mpm.getMediaProjection(projectionResultCode, data)
-        } catch (e: Exception) {
-            Toast.makeText(this, "خطا در راه‌اندازی ضبط صفحه: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
     }
 
     // ── Screen size ────────────────────────────────────────────────────────────
@@ -189,7 +166,7 @@ class FloatingWindowService : Service() {
     /**
      * کاربر دکمه استخراج را زد:
      *  1. از AccessibilityService استفاده می‌کند اگر فعال باشد (fallback سریع)
-     *  2. در غیر این‌صورت از ضبط صفحه + OCR استفاده می‌کند
+     *  2. در غیر این‌صورت از Shizuku screencap + OCR استفاده می‌کند
      */
     private fun performExtraction() {
         // روش اول: AccessibilityService (اگر موجود باشد — fallback)
@@ -202,36 +179,49 @@ class FloatingWindowService : Service() {
             }
         }
 
-        // روش اصلی: ضبط صفحه + OCR
-        val projection = mediaProjection
-        if (projection == null) {
+        // بررسی وضعیت Shizuku
+        if (!ShizukuHelper.isRunning() || !ShizukuHelper.hasPermission()) {
             Toast.makeText(
                 this,
-                "مجوز ضبط صفحه داده نشده.\nبرنامه را باز کنید و «فعال‌سازی ضبط صفحه» را بزنید.",
+                "Shizuku فعال نیست.\nبرنامه اصلی را باز کنید و Shizuku را فعال کنید.",
                 Toast.LENGTH_LONG
             ).show()
             return
         }
 
+        btnExtract?.isEnabled = false
         btnExtract?.text = "⏳"
-        serviceScope.launch {
-            val links = try {
-                ScreenLinkExtractor(this@FloatingWindowService, projection).extractLinks()
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(this@FloatingWindowService, "خطا: ${e.message}", Toast.LENGTH_SHORT).show()
+
+        // اطمینان از bind بودن UserService سپس اجرای OCR
+        ShizukuHelper.bindAndRun { bound ->
+            if (!bound) {
+                serviceScope.launch(Dispatchers.Main) {
+                    Toast.makeText(this@FloatingWindowService, "اتصال به Shizuku ناموفق بود", Toast.LENGTH_SHORT).show()
+                    btnExtract?.isEnabled = true
                     btnExtract?.text = "🔗 استخراج"
                 }
-                return@launch
+                return@bindAndRun
             }
-
-            withContext(Dispatchers.Main) {
-                btnExtract?.text = "🔗 استخراج"
-                if (links.isEmpty()) {
-                    Toast.makeText(this@FloatingWindowService, getString(R.string.no_link_found), Toast.LENGTH_SHORT).show()
-                    return@withContext
+            serviceScope.launch {
+                val links = try {
+                    ScreenLinkExtractor(this@FloatingWindowService).extractLinks()
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@FloatingWindowService, "خطا: ${e.message}", Toast.LENGTH_SHORT).show()
+                        btnExtract?.isEnabled = true
+                        btnExtract?.text = "🔗 استخراج"
+                    }
+                    return@launch
                 }
-                handleLinks(links)
+                withContext(Dispatchers.Main) {
+                    btnExtract?.isEnabled = true
+                    btnExtract?.text = "🔗 استخراج"
+                    if (links.isEmpty()) {
+                        Toast.makeText(this@FloatingWindowService, getString(R.string.no_link_found), Toast.LENGTH_SHORT).show()
+                        return@withContext
+                    }
+                    handleLinks(links)
+                }
             }
         }
     }

@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.PixelFormat
-import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -29,20 +28,6 @@ class MainActivity : AppCompatActivity() {
     private val overlayLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { updateAllUI() }
-
-    /** درخواست مجوز ضبط صفحه از کاربر */
-    private val screenCaptureLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK && result.data != null) {
-            FloatingWindowService.projectionResultCode = result.resultCode
-            FloatingWindowService.projectionData       = result.data
-            updateAllUI()
-            Snackbar.make(binding.root, "✓ مجوز ضبط صفحه داده شد", Snackbar.LENGTH_SHORT).show()
-        } else {
-            Toast.makeText(this, "مجوز ضبط صفحه رد شد", Toast.LENGTH_LONG).show()
-        }
-    }
 
     private val appSelectorLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -115,7 +100,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupClickListeners() {
         binding.btnOverlay.setOnClickListener { requestOverlayPermission() }
-        binding.btnScreenCapture.setOnClickListener { requestScreenCapturePermission() }
+        binding.btnShizuku.setOnClickListener { requestShizukuPermission() }
         binding.btnSelectApps.setOnClickListener {
             appSelectorLauncher.launch(Intent(this, AppSelectorActivity::class.java))
         }
@@ -159,13 +144,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * بررسی اینکه مجوز ضبط صفحه داده شده است.
-     * توکن در FloatingWindowService.companion ذخیره می‌شود.
+     * بررسی وضعیت Shizuku — باید نصب، در حال اجرا و دارای مجوز باشد.
      */
-    private fun hasScreenCapturePermission(): Boolean {
-        return FloatingWindowService.projectionResultCode != 0 &&
-               FloatingWindowService.projectionData != null
-    }
+    private fun hasShizukuPermission(): Boolean =
+        ShizukuHelper.isInstalled(this) &&
+        ShizukuHelper.isRunning() &&
+        ShizukuHelper.hasPermission()
 
     // ── Permission Requests ────────────────────────────────────────────────────
 
@@ -178,12 +162,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * باز کردن دیالوگ سیستمی ضبط صفحه.
-     * یک پنجره ساده «آیا اجازه می‌دهید این برنامه صفحه را ضبط کند؟» نشان می‌دهد.
+     * درخواست یا راهنمایی برای Shizuku.
      */
-    private fun requestScreenCapturePermission() {
-        val mpm = getSystemService(MediaProjectionManager::class.java)
-        screenCaptureLauncher.launch(mpm.createScreenCaptureIntent())
+    private fun requestShizukuPermission() {
+        when {
+            !ShizukuHelper.isInstalled(this) ->
+                Snackbar.make(binding.root, "لطفاً برنامه Shizuku را از Play Store نصب کنید", Snackbar.LENGTH_LONG).show()
+            !ShizukuHelper.isRunning() ->
+                Snackbar.make(binding.root, "برنامه Shizuku را باز کنید و سرویس را Start کنید", Snackbar.LENGTH_LONG).show()
+            else ->
+                ShizukuHelper.requestPermission()
+        }
     }
 
     // ── UI Updates ─────────────────────────────────────────────────────────────
@@ -197,8 +186,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updatePermissionUI() {
-        val overlayOk       = hasOverlayPermission()
-        val screenCaptureOk = hasScreenCapturePermission()
+        val overlayOk  = hasOverlayPermission()
+        val shizukuOk  = hasShizukuPermission()
 
         with(binding) {
             // Overlay row
@@ -214,22 +203,22 @@ class MainActivity : AppCompatActivity() {
                 btnOverlay.alpha     = 1f
             }
 
-            // Screen capture row
-            if (screenCaptureOk) {
-                tvScreenCaptureStatus.text = getString(R.string.permission_screen_capture_ok)
-                tvScreenCaptureStatus.setTextColor(getColor(R.color.green))
-                btnScreenCapture.isEnabled = false
-                btnScreenCapture.alpha     = 0.5f
+            // Shizuku row
+            if (shizukuOk) {
+                tvShizukuStatus.text = getString(R.string.permission_shizuku_ok)
+                tvShizukuStatus.setTextColor(getColor(R.color.green))
+                btnShizuku.isEnabled = false
+                btnShizuku.alpha     = 0.5f
             } else {
-                tvScreenCaptureStatus.text = getString(R.string.permission_screen_capture_no)
-                tvScreenCaptureStatus.setTextColor(getColor(R.color.red))
-                btnScreenCapture.isEnabled = true
-                btnScreenCapture.alpha     = 1f
+                tvShizukuStatus.text = getString(R.string.permission_shizuku_no)
+                tvShizukuStatus.setTextColor(getColor(R.color.red))
+                btnShizuku.isEnabled = true
+                btnShizuku.alpha     = 1f
             }
 
-            // سرویس فقط نیاز به Overlay + ScreenCapture دارد
-            btnStartService.isEnabled = overlayOk && screenCaptureOk
-            btnStartService.alpha     = if (overlayOk && screenCaptureOk) 1f else 0.5f
+            // سرویس فقط نیاز به Overlay + Shizuku دارد
+            btnStartService.isEnabled = overlayOk && shizukuOk
+            btnStartService.alpha     = if (overlayOk && shizukuOk) 1f else 0.5f
         }
     }
 
@@ -276,9 +265,9 @@ class MainActivity : AppCompatActivity() {
                 .make(binding.root, "ابتدا مجوز نمایش روی برنامه‌ها را فعال کنید", Snackbar.LENGTH_LONG)
                 .setAction("فعال‌سازی") { requestOverlayPermission() }
                 .show()
-            !hasScreenCapturePermission() -> Snackbar
-                .make(binding.root, "ابتدا مجوز ضبط صفحه را فعال کنید", Snackbar.LENGTH_LONG)
-                .setAction("فعال‌سازی") { requestScreenCapturePermission() }
+            !hasShizukuPermission() -> Snackbar
+                .make(binding.root, "ابتدا Shizuku را فعال کنید", Snackbar.LENGTH_LONG)
+                .setAction("راهنما") { requestShizukuPermission() }
                 .show()
             else -> {
                 FloatingWindowService.start(this)
